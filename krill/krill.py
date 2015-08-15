@@ -279,8 +279,8 @@ class Application:
             self._known_items.add(item_id)
             items.append((item, pattern))
 
-        for key, source_patterns in sources.items():
-            for item in self._get_stream_items(key):
+        for source, source_patterns in sources.items():
+            for item in self._get_stream_items(source):
                 regexes = source_patterns or patterns
                 if regexes:
                     for pattern in regexes:
