@@ -175,7 +175,10 @@ class Application:
         output = dict()
         for line in lines:
             tokens = line.split()
-            output[tokens[0]] = [re.compile(token, re.IGNORECASE) for token in tokens[1:]] if len(tokens) > 1 else []
+            if len(tokens) > 1:
+                output[tokens[0]] = [re.compile(token, re.IGNORECASE) for token in tokens[1:]]
+            else:
+                output[tokens[0]] = list()
         return output
 
 
@@ -278,8 +281,8 @@ class Application:
 
         for key, source_patterns in sources.items():
             for item in self._get_stream_items(key):
-                if source_patterns or patterns:
-                    regexes = source_patterns or patterns
+                regexes = source_patterns or patterns
+                if regexes:
                     for pattern in regexes:
                         if (item.title is not None and pattern.search(item.title)) or \
                            (item.text is not None and pattern.search(item.text)) or \
