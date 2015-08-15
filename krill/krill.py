@@ -170,7 +170,13 @@ class Application:
             sys.exit(1)
 
         # Discard empty lines and comments
-        return [line for line in lines if line and not line.startswith("#")]
+        lines = [line for line in lines if line and not line.startswith("#")]
+
+        output = dict()
+        for line in lines:
+            tokens = line.split()
+            output[tokens[0]] = [re.compile(token, re.IGNORECASE) for token in tokens[1:]] if len(tokens) > 1 else []
+        return output
 
 
     # Extracts feed URLs from an OPML file (https://en.wikipedia.org/wiki/OPML)
@@ -232,14 +238,16 @@ class Application:
 
     def update(self):
         # Reload sources and filters to allow for live editing
-        sources = list()
+        sources = dict()
         if self.args.sources is not None:
-            sources.extend(self.args.sources)
+            for source in self.args.sources:
+                sources[source] = list()
         if self.args.sources_file is not None:
             if self.args.sources_file.endswith(".opml"):
-                sources.extend(self._read_opml_file(self.args.sources_file))
+                for source in self._read_opml_file(self.args.sources_file):
+                    sources[source] = list()
             else:
-                sources.extend(self._read_file(self.args.sources_file))
+                sources.update(self._read_file(self.args.sources_file))
         if not sources:
             self._print_error("No source specifications found")
             sys.exit(1)
@@ -268,10 +276,11 @@ class Application:
             self._known_items.add(item_id)
             items.append((item, pattern))
 
-        for source in sources:
-            for item in self._get_stream_items(source):
-                if patterns:
-                    for pattern in patterns:
+        for key, source_patterns in sources.items():
+            for item in self._get_stream_items(key):
+                if source_patterns or patterns:
+                    regexes = source_patterns or patterns
+                    for pattern in regexes:
                         if (item.title is not None and pattern.search(item.title)) or \
                            (item.text is not None and pattern.search(item.text)) or \
                            (item.link is not None and pattern.search(item.link)):
