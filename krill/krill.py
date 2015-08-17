@@ -161,7 +161,18 @@ class Application:
             return parser.get_feed_items(data, url)
 
 
-    def _read_file(self, filename):
+    def _read_sources_file(self, filename):
+        output = dict()
+        lines = self._read_lines(filename)
+        for line in lines:
+            tokens = line.split()
+            if len(tokens) > 1:
+                output[tokens[0]] = [re.compile(token, re.IGNORECASE) for token in tokens[1:]]
+            else:
+                output[tokens[0]] = list()
+        return output
+
+    def _read_lines(self, filename):
         try:
             with open(filename, "r") as myfile:
                 lines = [line.strip() for line in myfile.readlines()]
@@ -170,16 +181,8 @@ class Application:
             sys.exit(1)
 
         # Discard empty lines and comments
-        lines = [line for line in lines if line and not line.startswith("#")]
-
-        output = dict()
-        for line in lines:
-            tokens = line.split()
-            if len(tokens) > 1:
-                output[tokens[0]] = [re.compile(token, re.IGNORECASE) for token in tokens[1:]]
-            else:
-                output[tokens[0]] = list()
-        return output
+        return [line for line in lines if line and not line.startswith("#")]
+    _read_filters_file = _read_lines
 
 
     # Extracts feed URLs from an OPML file (https://en.wikipedia.org/wiki/OPML)
@@ -250,7 +253,7 @@ class Application:
                 for source in self._read_opml_file(self.args.sources_file):
                     sources[source] = list()
             else:
-                sources.update(self._read_file(self.args.sources_file))
+                sources.update(self._read_sources_file(self.args.sources_file))
         if not sources:
             self._print_error("No source specifications found")
             sys.exit(1)
@@ -259,7 +262,7 @@ class Application:
         if self.args.filters is not None:
             filters.extend(self.args.filters)
         if self.args.filters_file is not None:
-            filters.extend(self._read_file(self.args.filters_file))
+            filters.extend(self._read_filters_file(self.args.filters_file))
 
         patterns = list()
         for filter_string in filters:
