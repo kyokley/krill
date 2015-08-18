@@ -167,7 +167,7 @@ class Application:
         for line in lines:
             tokens = line.split()
             if len(tokens) > 1:
-                output[tokens[0]] = [re.compile(token, re.IGNORECASE) for token in tokens[1:]]
+                output[tokens[0]] = tokens[1:]
             else:
                 output[tokens[0]] = list()
         return output
