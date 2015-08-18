@@ -264,10 +264,10 @@ class Application:
         if self.args.filters_file is not None:
             filters.extend(self._read_filters_file(self.args.filters_file))
 
-        patterns = list()
+        global_patterns = list()
         for filter_string in filters:
             try:
-                patterns.append(re.compile(filter_string, re.IGNORECASE))
+                global_patterns.append(re.compile(filter_string, re.IGNORECASE))
             except Exception as error:
                 self._print_error("Error while compiling regular expression '%s': %s" %
                                   (filter_string, str(error)))
@@ -283,8 +283,9 @@ class Application:
             items.append((item, pattern))
 
         for source, source_patterns in sources.items():
+            re_objects = [re.compile(pattern, re.IGNORECASE) for pattern in source_patterns]
             for item in self._get_stream_items(source):
-                regexes = source_patterns or patterns
+                regexes = re_objects or global_patterns
                 if regexes:
                     for pattern in regexes:
                         if (item.title is not None and pattern.search(item.title)) or \
