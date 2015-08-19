@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 # krill - the hacker's way of keeping up with the world
 #
 # Copyright (c) 2015 Philipp Emanuel Weidmann <pew@worldwidemann.com>
@@ -22,14 +21,11 @@ import feedparser
 from bs4 import BeautifulSoup
 from blessings import Terminal
 
-
-
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
-
-
-class StreamParser:
-    def _html_to_text(self, html):
+class StreamParser(object):
+    @staticmethod
+    def _html_to_text(html):
         # Hack to prevent Beautiful Soup from collapsing space-keeping tags
         # until no whitespace remains at all
         html = re.sub("<(br|p|li)", " \\g<0>", html, flags=re.IGNORECASE)
@@ -37,8 +33,8 @@ class StreamParser:
         # Idea from http://stackoverflow.com/a/1546251
         return " ".join(text.strip().split())
 
-
-    def get_tweets(self, html):
+    @classmethod
+    def get_tweets(cls, html):
         document = BeautifulSoup(html, "html.parser")
 
         for tweet in document.find_all("p", class_="tweet-text"):
@@ -48,28 +44,28 @@ class StreamParser:
             username = header.find("span", class_="username").b.string
 
             time_string = header.find("span", class_="_timestamp")["data-time"]
-            time = datetime.fromtimestamp(int(time_string))
+            timestamp = datetime.fromtimestamp(int(time_string))
 
             # For Python 2 and 3 compatibility
             to_unicode = unicode if sys.version_info[0] < 3 else str
             # Remove ellipsis characters added by Twitter
-            text = self._html_to_text(to_unicode(tweet).replace(u"\u2026", ""))
+            text = cls._html_to_text(to_unicode(tweet).replace(u"\u2026", ""))
 
             link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
 
-            yield StreamItem("%s (@%s)" % (name, username), time, None, text, link)
+            yield StreamItem("%s (@%s)" % (name, username), timestamp, None, text, link)
 
-
-    def get_feed_items(self, xml, url):
+    @classmethod
+    def get_feed_items(cls, xml, url):
         feed_data = feedparser.parse(xml)
         # Default to feed URL if no title element is present
         feed_title = feed_data.feed.get("title", url)
 
         for entry in feed_data.entries:
-            time = datetime.fromtimestamp(calendar.timegm(entry.published_parsed)) \
+            timestamp = datetime.fromtimestamp(calendar.timegm(entry.published_parsed)) \
                    if "published_parsed" in entry else None
             title = entry.get("title")
-            text = self._html_to_text(entry.description) if "description" in entry else None
+            text = cls._html_to_text(entry.description) if "description" in entry else None
             link = entry.get("link")
 
             # Some feeds put the text in the title element
@@ -79,29 +75,28 @@ class StreamParser:
 
             # At least one element must contain text for the item to be useful
             if title or text or link:
-                yield StreamItem(feed_title, time, title, text, link)
+                yield StreamItem(feed_title, timestamp, title, text, link)
 
-
-
-class TextExcerpter:
+class TextExcerpter(object):
     # Clips the text to the position succeeding the first whitespace string
-    def _clip_left(self, text):
+    @staticmethod
+    def _clip_left(text):
         return re.sub("^\S*\s*", "", text, 1)
 
-
     # Clips the text to the position preceding the last whitespace string
-    def _clip_right(self, text):
+    @staticmethod
+    def _clip_right(text):
         return re.sub("\s*\S*$", "", text, 1)
-
 
     # Returns a portion of text at most max_length in length
     # and containing the first match of pattern, if specified
-    def get_excerpt(self, text, max_length, pattern=None):
+    @classmethod
+    def get_excerpt(cls, text, max_length, pattern=None):
         if len(text) <= max_length:
             return text, False, False
 
         if pattern is None or not pattern.search(text):
-            return self._clip_right(text[0:max_length]), False, True
+            return cls._clip_right(text[0:max_length]), False, True
         else:
             match = pattern.search(text)
             start, end = match.span()
@@ -117,9 +112,9 @@ class TextExcerpter:
             excerpt_start = max(excerpt_end - max_length, 0)
             excerpt = text[excerpt_start:excerpt_end]
             if excerpt_start > 0:
-                excerpt = self._clip_left(excerpt)
+                excerpt = cls._clip_left(excerpt)
             if excerpt_end < len(text):
-                excerpt = self._clip_right(excerpt)
+                excerpt = cls._clip_right(excerpt)
 
             return excerpt, excerpt_start > 0, excerpt_end < len(text)
 
@@ -128,15 +123,17 @@ class Application(object):
         self._known_items = set()
         self.args = args
 
-    def _print_error(self, error):
+    @staticmethod
+    def _print_error(error):
         print("")
         print(Terminal().bright_red(error))
 
-    def _get_stream_items(self, url):
+    @classmethod
+    def _get_stream_items(cls, url):
         try:
             data = requests.get(url).content
         except Exception as error:
-            self._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
+            cls._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
             # The problem might be temporary, so we do not exit
             return list()
 
@@ -146,9 +143,10 @@ class Application(object):
         else:
             return parser.get_feed_items(data, url)
 
-    def _read_sources_file(self, filename):
+    @classmethod
+    def _read_sources_file(cls, filename):
         output = dict()
-        lines = self._read_lines(filename)
+        lines = cls._read_lines(filename)
         for line in lines:
             tokens = line.split()
             if len(tokens) > 1:
@@ -157,12 +155,13 @@ class Application(object):
                 output[tokens[0]] = list()
         return output
 
-    def _read_lines(self, filename):
+    @classmethod
+    def _read_lines(cls, filename):
         try:
             with open(filename, "r") as myfile:
                 lines = [line.strip() for line in myfile.readlines()]
         except Exception as error:
-            self._print_error("Unable to read file '%s': %s" % (filename, str(error)))
+            cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
             sys.exit(1)
 
         # Discard empty lines and comments
@@ -170,25 +169,27 @@ class Application(object):
     _read_filters_file = _read_lines
 
     # Extracts feed URLs from an OPML file (https://en.wikipedia.org/wiki/OPML)
-    def _read_opml_file(self, filename):
+    @classmethod
+    def _read_opml_file(cls, filename):
         try:
             with open(filename, "r") as myfile:
                 opml = myfile.read()
         except Exception as error:
-            self._print_error("Unable to read file '%s': %s" % (filename, str(error)))
+            cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
             sys.exit(1)
 
         return [match.group(2).strip() for match in
                 re.finditer("xmlUrl\s*=\s*([\"'])(.*?)\\1", opml, flags=re.IGNORECASE)]
 
-    def _highlight_pattern(self, text, pattern, pattern_style, text_style=None):
+    @staticmethod
+    def _highlight_pattern(text, pattern, pattern_style, text_style=None):
         if pattern is None:
             return text if text_style is None else text_style(text)
         if text_style is None:
             return pattern.sub(pattern_style("\\g<0>"), text)
         return text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
 
-    def _print_stream_item(self, item, pattern=None):
+    def _print_stream_item(cls, item, pattern=None):
         print("")
 
         term = Terminal()
@@ -198,7 +199,7 @@ class Application(object):
         print("%s%s:" % (term.cyan(item.source), time_label))
 
         if item.title is not None:
-            print("   %s" % self._highlight_pattern(item.title, pattern,
+            print("   %s" % cls._highlight_pattern(item.title, pattern,
                                                     term.bold_black_on_bright_yellow, term.bold))
 
         if item.text is not None:
@@ -213,13 +214,13 @@ class Application(object):
                              term.bright_magenta_underline("\\g<0>"), excerpt)
 
             # TODO: This can break previously applied highlighting (e.g. URLs)
-            excerpt = self._highlight_pattern(excerpt, pattern, term.black_on_bright_yellow)
+            excerpt = cls._highlight_pattern(excerpt, pattern, term.black_on_bright_yellow)
 
             print("   %s%s%s" % ("... " if clipped_left else "", excerpt,
                                  " ..." if clipped_right else ""))
 
         if item.link is not None:
-            print("   %s" % self._highlight_pattern(item.link, pattern,
+            print("   %s" % cls._highlight_pattern(item.link, pattern,
                                                     term.black_on_bright_yellow_underline,
                                                     term.bright_blue_underline))
 
