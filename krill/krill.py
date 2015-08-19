@@ -8,21 +8,13 @@
 #
 # Released under the terms of the GNU General Public License, version 3
 # (https://gnu.org/licenses/gpl.html)
-
-
-try:
-    # Python 3
-    from urllib.request import urlopen
-except ImportError:
-    # Python 2
-    from urllib2 import urlopen
-
 import re
 import sys
 import time
 import codecs
 import argparse
 import calendar
+import requests
 from datetime import datetime
 from collections import namedtuple
 
@@ -131,24 +123,18 @@ class TextExcerpter:
 
             return excerpt, excerpt_start > 0, excerpt_end < len(text)
 
-
-
-class Application:
-    _known_items = set()
-
-
+class Application(object):
     def __init__(self, args):
+        self._known_items = set()
         self.args = args
-
 
     def _print_error(self, error):
         print("")
         print(Terminal().bright_red(error))
 
-
     def _get_stream_items(self, url):
         try:
-            data = urlopen(url).read()
+            data = requests.get(url).content
         except Exception as error:
             self._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
             # The problem might be temporary, so we do not exit
@@ -159,7 +145,6 @@ class Application:
             return parser.get_tweets(data)
         else:
             return parser.get_feed_items(data, url)
-
 
     def _read_sources_file(self, filename):
         output = dict()
@@ -184,7 +169,6 @@ class Application:
         return [line for line in lines if line and not line.startswith("#")]
     _read_filters_file = _read_lines
 
-
     # Extracts feed URLs from an OPML file (https://en.wikipedia.org/wiki/OPML)
     def _read_opml_file(self, filename):
         try:
@@ -197,14 +181,12 @@ class Application:
         return [match.group(2).strip() for match in
                 re.finditer("xmlUrl\s*=\s*([\"'])(.*?)\\1", opml, flags=re.IGNORECASE)]
 
-
     def _highlight_pattern(self, text, pattern, pattern_style, text_style=None):
         if pattern is None:
             return text if text_style is None else text_style(text)
         if text_style is None:
             return pattern.sub(pattern_style("\\g<0>"), text)
         return text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
-
 
     def _print_stream_item(self, item, pattern=None):
         print("")
@@ -240,7 +222,6 @@ class Application:
             print("   %s" % self._highlight_pattern(item.link, pattern,
                                                     term.black_on_bright_yellow_underline,
                                                     term.bright_blue_underline))
-
 
     def update(self):
         # Reload sources and filters to allow for live editing
@@ -303,7 +284,6 @@ class Application:
         for item in items:
             self._print_stream_item(item[0], item[1])
 
-
     def run(self):
         term = Terminal()
         print("%s (%s)" % (term.bold("krill 0.3.0"),
@@ -318,8 +298,6 @@ class Application:
             except KeyboardInterrupt:
                 # Do not print stacktrace if user exits with Ctrl+C
                 sys.exit()
-
-
 
 def main():
     # Force UTF-8 encoding for stdout as we will be printing Unicode characters
@@ -351,8 +329,6 @@ def main():
         arg_parser.error("either a source URL (-s) or a sources file (-S) must be given")
 
     Application(args).run()
-
-
 
 if __name__ == "__main__":
     main()

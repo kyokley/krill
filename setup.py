@@ -41,6 +41,7 @@ setup(
         "beautifulsoup4",
         "feedparser",
         "blessings",
+        'requests',
     ],
     test_suite='nose.collector',
     tests_require=['nose',
