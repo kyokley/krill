@@ -122,6 +122,15 @@ class Application(object):
     def __init__(self, args):
         self._known_items = set()
         self.args = args
+        self.items = list()
+
+    def add_item(self, item, pattern=None):
+        item_id = (item.source, item.link)
+        if item_id in self._known_items:
+            # Do not print an item more than once
+            return
+        self._known_items.add(item_id)
+        self.items.append((item, pattern))
 
     @staticmethod
     def _print_error(error):
@@ -203,12 +212,13 @@ class Application(object):
                                                     term.bold_black_on_bright_yellow, term.bold))
 
         if item.text is not None:
-            excerpter = TextExcerpter()
-            excerpt, clipped_left, clipped_right = excerpter.get_excerpt(item.text, 220, pattern)
+            excerpt, clipped_left, clipped_right = TextExcerpter.get_excerpt(item.text, 300, pattern)
 
             # Hashtag or mention
             excerpt = re.sub("(?<!\w)([#@])(\w+)",
-                             term.green("\\g<1>") + term.bright_green("\\g<2>"), excerpt)
+                             term.green("\\g<1>") + term.bright_green("\\g<2>"),
+                             excerpt)
+
             # URL in one of the forms commonly encountered on the web
             excerpt = re.sub("(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
                              term.bright_magenta_underline("\\g<0>"), excerpt)
@@ -220,9 +230,10 @@ class Application(object):
                                  " ..." if clipped_right else ""))
 
         if item.link is not None:
-            print("   %s" % cls._highlight_pattern(item.link, pattern,
-                                                    term.black_on_bright_yellow_underline,
-                                                    term.bright_blue_underline))
+            print("   %s" % cls._highlight_pattern(item.link,
+                                                   pattern,
+                                                   term.black_on_bright_yellow_underline,
+                                                   term.bright_blue_underline))
 
     def update(self):
         # Reload sources and filters to allow for live editing
@@ -255,14 +266,7 @@ class Application(object):
                                   (filter_string, str(error)))
                 sys.exit(1)
 
-        items = list()
-        def add_item(item, pattern=None):
-            item_id = (item.source, item.link)
-            if item_id in self._known_items:
-                # Do not print an item more than once
-                return
-            self._known_items.add(item_id)
-            items.append((item, pattern))
+        self.items = list()
 
         for source, source_patterns in sources.items():
             re_objects = [re.compile(pattern, re.IGNORECASE) for pattern in source_patterns]
@@ -273,16 +277,16 @@ class Application(object):
                         if (item.title is not None and pattern.search(item.title)) or \
                            (item.text is not None and pattern.search(item.text)) or \
                            (item.link is not None and pattern.search(item.link)):
-                            add_item(item, pattern)
+                            self.add_item(item, pattern)
                             break
                 else:
                     # No filter patterns specified; simply print all items
-                    add_item(item)
+                    self.add_item(item)
 
         # Print latest news last
-        items.sort(key=lambda item: datetime.now() if item[0].time is None else item[0].time)
+        self.items.sort(key=lambda item: datetime.now() if item[0].time is None else item[0].time)
 
-        for item in items:
+        for item in self.items:
             self._print_stream_item(item[0], item[1])
 
     def run(self):
