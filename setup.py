@@ -42,6 +42,7 @@ setup(
         "feedparser",
         "blessings",
         'requests',
+        'requests[security]',
     ],
     test_suite='nose.collector',
     tests_require=['nose',

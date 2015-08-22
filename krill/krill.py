@@ -96,7 +96,7 @@ class TextExcerpter(object):
             return text, False, False
 
         if pattern is None or not pattern.search(text):
-            return cls._clip_right(text[0:max_length]), False, True
+            return cls._clip_right(text[:max_length]), False, True
         else:
             match = pattern.search(text)
             start, end = match.span()
@@ -146,11 +146,10 @@ class Application(object):
             # The problem might be temporary, so we do not exit
             return list()
 
-        parser = StreamParser()
         if "//twitter.com/" in url:
-            return parser.get_tweets(data)
+            return StreamParser.get_tweets(data)
         else:
-            return parser.get_feed_items(data, url)
+            return StreamParser.get_feed_items(data, url)
 
     @classmethod
     def _read_sources_file(cls, filename):
@@ -208,11 +207,17 @@ class Application(object):
         print("%s%s:" % (term.cyan(item.source), time_label))
 
         if item.title is not None:
-            print("   %s" % cls._highlight_pattern(item.title, pattern,
-                                                    term.bold_black_on_bright_yellow, term.bold))
+            print("   %s" % cls._highlight_pattern(item.title,
+                                                   pattern,
+                                                   term.bold_black_on_bright_yellow,
+                                                   term.bold))
 
         if item.text is not None:
-            excerpt, clipped_left, clipped_right = TextExcerpter.get_excerpt(item.text, 300, pattern)
+            (excerpt,
+             clipped_left,
+             clipped_right) = TextExcerpter.get_excerpt(item.text,
+                                                        300,
+                                                        pattern)
 
             # Hashtag or mention
             excerpt = re.sub("(?<!\w)([#@])(\w+)",
@@ -224,7 +229,9 @@ class Application(object):
                              term.bright_magenta_underline("\\g<0>"), excerpt)
 
             # TODO: This can break previously applied highlighting (e.g. URLs)
-            excerpt = cls._highlight_pattern(excerpt, pattern, term.black_on_bright_yellow)
+            excerpt = cls._highlight_pattern(excerpt,
+                                             pattern,
+                                             term.black_on_bright_yellow)
 
             print("   %s%s%s" % ("... " if clipped_left else "", excerpt,
                                  " ..." if clipped_right else ""))
