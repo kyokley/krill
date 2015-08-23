@@ -53,7 +53,7 @@ class AndExpr(BinaryExpr):
             matches = set()
 
             if output:
-                matches.update(left_output[1], right_output(1))
+                matches.update(left_output[1], right_output[1])
             return (output, matches)
         return func
 
