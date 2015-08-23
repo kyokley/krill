@@ -10,11 +10,8 @@ from lexer import (LPAREN,
 import re
 
 class Expr(object):
-    def __call__(self):
-        return None
-
     def build(self):
-        return None
+        return (False, set())
 
 class FilterExpr(Expr):
     def __init__(self, token):

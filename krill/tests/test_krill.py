@@ -39,7 +39,7 @@ class TestReadSourceFile(unittest.TestCase):
         mock_open.return_value.__enter__.return_value = self.mock_myfile
         actual = self.application._read_sources_file('filename')
         expected = {
-                'https://twitter.com/hashtag/programming': ['python'],
-                'http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml': ['bailout'],
+                'https://twitter.com/hashtag/programming': 'python',
+                'http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml': 'bailout',
                 }
         self.assertEqual(actual, expected)

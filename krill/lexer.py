@@ -32,7 +32,7 @@ def lex(characters, token_exprs):
             regex = re.compile(pattern)
             match = regex.match(characters, pos)
             if match:
-                text = match.group(0)
+                text = match.group(0).strip()
                 if tag:
                     token = (text, tag)
                     tokens.append(token)
