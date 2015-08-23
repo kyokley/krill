@@ -123,15 +123,14 @@ class TokenParser(object):
 
     def E(self):
         arg1 = self.P()
-        if self.next() != self.end:
-            if self.next()[1] in (AND, OR):
-                op = self.next()[1]
-                self.consume()
-                arg2 = self.P()
-                if op == AND:
-                    return AndExpr(arg1, arg2)
-                elif op == OR:
-                    return OrExpr(arg1, arg2)
+        while self.next() != self.end and self.next()[1] in (AND, OR):
+            op = self.next()[1]
+            self.consume()
+            arg2 = self.P()
+            if op == AND:
+                arg1 = AndExpr(arg1, arg2)
+            elif op == OR:
+                arg1 = OrExpr(arg1, arg2)
         return arg1
 
     def P(self):
