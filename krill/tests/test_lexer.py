@@ -98,3 +98,20 @@ class TestLexer(unittest.TestCase):
                     ]
         actual = filter_lex(test_str)
         self.assertEqual(expected, actual)
+
+    def test_multi_tier(self):
+        test_str = 'a && (b || (c && d))'
+        expected = [('a', FILTER),
+                    ('&&', AND),
+                    ('(', LPAREN),
+                    ('b', FILTER),
+                    ('||', OR),
+                    ('(', LPAREN),
+                    ('c', FILTER),
+                    ('&&', AND),
+                    ('d', FILTER),
+                    (')', RPAREN),
+                    (')', RPAREN),
+                    ]
+        actual = filter_lex(test_str)
+        self.assertEqual(expected, actual)

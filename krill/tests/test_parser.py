@@ -72,3 +72,10 @@ class TestParser(unittest.TestCase):
         expected = 'AndExpr(NotExpr(FilterExpr(python is not fun)), OrExpr(FilterExpr(python is simple), FilterExpr(python is the best)))'
         actual = str(TokenParser(tokens).E())
         self.assertEquals(expected, actual)
+
+    def test_multi_tier(self):
+        test_str = 'a && (b || (c && d))'
+        tokens = filter_lex(test_str)
+        expected = 'AndExpr(FilterExpr(a), OrExpr(FilterExpr(b), AndExpr(FilterExpr(c), FilterExpr(d))))'
+        actual = str(TokenParser(tokens).E())
+        self.assertEquals(expected, actual)
