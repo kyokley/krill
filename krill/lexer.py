@@ -5,6 +5,7 @@ import re
 
 AND = 'AND'
 OR = 'OR'
+NOT = 'NOT'
 FILTER = 'FILTER'
 LPAREN = 'LPAREN'
 RPAREN = 'RPAREN'
@@ -16,6 +17,7 @@ token_exprs = [
     (r'\)', RPAREN),
     (r'&&', AND),
     (r'\|\|', OR),
+    (r'!', NOT),
     #(r'(\S+\s*?)+?(?=\s*($|\n|\(|\)|&&|\|\|))', FILTER),
     (r'((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))', FILTER),
     ]

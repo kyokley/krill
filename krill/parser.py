@@ -3,6 +3,7 @@ from lexer import (LPAREN,
                    RPAREN,
                    AND,
                    OR,
+                   NOT,
                    FILTER,
                    )
 
@@ -25,9 +26,9 @@ class FilterExpr(Expr):
         def func(text):
             match = regex.search(text)
             if match:
-                return match.group(0)
+                return (True, set([regex]))
             else:
-                return None
+                return (False, set())
 
         return func
 
@@ -45,7 +46,15 @@ class AndExpr(BinaryExpr):
             left_func = self.left.build()
             right_func = self.right.build()
 
-            return left_func(text) and right_func(text)
+            left_output = left_func(text)
+            right_output = right_func(text)
+
+            output = left_output[0] and right_output[0]
+            matches = set()
+
+            if output:
+                matches.update(left_output[1], right_output(1))
+            return (output, matches)
         return func
 
     def __str__(self):
@@ -57,11 +66,37 @@ class OrExpr(BinaryExpr):
             left_func = self.left.build()
             right_func = self.right.build()
 
-            return left_func(text) or right_func(text)
+            left_output = left_func(text)
+            right_output = right_func(text)
+
+            output = left_output[0] or right_output[0]
+            matches = set()
+
+            if output:
+                matches.update(left_output[1], right_output[1])
+            return (output, matches)
         return func
 
     def __str__(self):
         return 'OrExpr(%s, %s)' % (self.left, self.right)
+
+class NotExpr(Expr):
+    def __init__(self, input):
+        self.input = input
+
+    def build(self):
+        def func(text):
+            input_func = self.input.build()
+            input_output = input_func(text)
+
+            output = not input_output[0]
+            matches = set()
+
+            return (output, matches)
+        return func
+
+    def __str__(self):
+        return 'NotExpr(%s)' % (self.input)
 
 class TokenParser(object):
     def __init__(self, tokens):
@@ -91,14 +126,15 @@ class TokenParser(object):
 
     def E(self):
         arg1 = self.P()
-        if self.next()[1] in (AND, OR):
-            op = self.next()[1]
-            self.consume()
-            arg2 = self.P()
-            if op == AND:
-                return AndExpr(arg1, arg2)
-            elif op == OR:
-                return OrExpr(arg1, arg2)
+        if self.next() != self.end:
+            if self.next()[1] in (AND, OR):
+                op = self.next()[1]
+                self.consume()
+                arg2 = self.P()
+                if op == AND:
+                    return AndExpr(arg1, arg2)
+                elif op == OR:
+                    return OrExpr(arg1, arg2)
         return arg1
 
     def P(self):
@@ -110,6 +146,9 @@ class TokenParser(object):
             self.consume()
             expr = self.E()
             self.expect(RPAREN)
+        elif self.next()[1] == NOT:
+            self.consume()
+            expr = NotExpr(self.P())
         else:
             self.error()
         return expr

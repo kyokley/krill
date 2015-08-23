@@ -91,23 +91,40 @@ class TextExcerpter(object):
     def _clip_right(text):
         return re.sub("\s*\S*$", "", text, 1)
 
+    @staticmethod
+    def _get_max_pattern_span(text, patterns):
+        min_start, max_end = None, None
+        if patterns is not None:
+            for pattern in patterns:
+                match = pattern.search(text)
+                if match:
+                    start, end = match.span()
+                    if min_start is None:
+                        min_start = start
+                    else:
+                        min_start = min(min_start, start)
+                    if max_end is None:
+                        max_end = end
+                    else:
+                        max_end = max(max_end, end)
+
+        return min_start, max_end
+
     # Returns a portion of text at most max_length in length
     # and containing the first match of pattern, if specified
     @classmethod
-    def get_excerpt(cls, text, max_length, pattern=None):
+    def get_excerpt(cls, text, max_length, patterns=None):
         if len(text) <= max_length:
             return text, False, False
 
-        if pattern is None or not pattern.search(text):
+        start, end = cls._get_max_pattern_span(text, patterns)
+        if start is None and end is None:
             return cls._clip_right(text[:max_length]), False, True
         else:
-            match = pattern.search(text)
-            start, end = match.span()
-            match_text = match.group()
-            remaining_length = max_length - len(match_text)
+            remaining_length = max_length - (end - start)
             if remaining_length <= 0:
                 # Matches are never clipped
-                return match_text
+                return text[start:end]
 
             excerpt_start = max(start - (remaining_length // 2), 0)
             excerpt_end = min(end + (remaining_length - (start - excerpt_start)), len(text))
@@ -127,13 +144,13 @@ class Application(object):
         self.args = args
         self.items = list()
 
-    def add_item(self, item, pattern=None):
+    def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
         if item_id in self._known_items:
             # Do not print an item more than once
             return
         self._known_items.add(item_id)
-        self.items.append((item, pattern))
+        self.items.append((item, patterns))
 
     @staticmethod
     def _print_error(error):
@@ -193,14 +210,18 @@ class Application(object):
                 re.finditer("xmlUrl\s*=\s*([\"'])(.*?)\\1", opml, flags=re.IGNORECASE)]
 
     @staticmethod
-    def _highlight_pattern(text, pattern, pattern_style, text_style=None):
-        if pattern is None:
+    def _highlight_pattern(text, patterns, pattern_style, text_style=None):
+        if patterns is None:
             return text if text_style is None else text_style(text)
         if text_style is None:
-            return pattern.sub(pattern_style("\\g<0>"), text)
-        return text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
+            for pattern in patterns:
+                text = pattern.sub(pattern_style("\\g<0>"), text)
+            return text
+        for pattern in patterns:
+            text = text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
+        return text
 
-    def _print_stream_item(cls, item, pattern=None):
+    def _print_stream_item(cls, item, patterns=None):
         print("")
 
         term = Terminal()
@@ -211,7 +232,7 @@ class Application(object):
 
         if item.title is not None:
             print("   %s" % cls._highlight_pattern(item.title,
-                                                   pattern,
+                                                   patterns,
                                                    term.bold_black_on_bright_yellow,
                                                    term.bold))
 
@@ -220,7 +241,7 @@ class Application(object):
              clipped_left,
              clipped_right) = TextExcerpter.get_excerpt(item.text,
                                                         300,
-                                                        pattern)
+                                                        patterns)
 
             # Hashtag or mention
             excerpt = re.sub("(?<!\w)([#@])(\w+)",
@@ -233,7 +254,7 @@ class Application(object):
 
             # TODO: This can break previously applied highlighting (e.g. URLs)
             excerpt = cls._highlight_pattern(excerpt,
-                                             pattern,
+                                             patterns,
                                              term.black_on_bright_yellow)
 
             print("   %s%s%s" % ("... " if clipped_left else "", excerpt,
@@ -241,7 +262,7 @@ class Application(object):
 
         if item.link is not None:
             print("   %s" % cls._highlight_pattern(item.link,
-                                                   pattern,
+                                                   patterns,
                                                    term.black_on_bright_yellow_underline,
                                                    term.bright_blue_underline))
 
@@ -292,10 +313,15 @@ class Application(object):
             for item in self._get_stream_items(source):
                 if re_funcs:
                     for re_func in re_funcs: 
-                        if (item.title is not None and re_func(item.title)) or \
-                           (item.text is not None and re_func(item.text)) or \
-                           (item.link is not None and re_func(item.link)):
-                            self.add_item(item)
+                        title_matches = item.title is not None and re_func(item.title) or (False, set())
+                        text_matches = item.text is not None and re_func(item.text) or (False, set())
+                        link_matches = item.link is not None and re_func(item.link) or (False, set())
+                        if (title_matches[0] or
+                                text_matches[0] or
+                                link_matches[0]):
+                            matched_texts = set()
+                            matched_texts.update(title_matches[1], text_matches[1], link_matches[1])
+                            self.add_item(item, matched_texts)
                             break
                 else:
                     # No filter patterns specified; simply print all items
