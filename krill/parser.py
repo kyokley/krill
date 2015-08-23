@@ -114,3 +114,5 @@ class TokenParser(object):
             self.error()
         return expr
 
+    def buildFunc(self):
+        return self.E().build()

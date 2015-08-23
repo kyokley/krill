@@ -21,6 +21,9 @@ import feedparser
 from bs4 import BeautifulSoup
 from blessings import Terminal
 
+from lexer import filter_lex
+from parser import TokenParser
+
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
 class StreamParser(object):
@@ -156,11 +159,11 @@ class Application(object):
         output = dict()
         lines = cls._read_lines(filename)
         for line in lines:
-            tokens = line.split()
-            if len(tokens) > 1:
-                output[tokens[0]] = tokens[1:]
+            data = line.partition(' ')
+            if data[1] and data[2]:
+                output[data[0]] = data[2]
             else:
-                output[tokens[0]] = list()
+                output[data[0]] = list()
         return output
 
     @classmethod
@@ -267,7 +270,9 @@ class Application(object):
         global_patterns = list()
         for filter_string in filters:
             try:
-                global_patterns.append(re.compile(filter_string, re.IGNORECASE))
+                tokens = filter_lex(filter_string)
+                parser = TokenParser(tokens)
+                global_patterns.append(parser.buildFunc())
             except Exception as error:
                 self._print_error("Error while compiling regular expression '%s': %s" %
                                   (filter_string, str(error)))
@@ -276,15 +281,21 @@ class Application(object):
         self.items = list()
 
         for source, source_patterns in sources.items():
-            re_objects = [re.compile(pattern, re.IGNORECASE) for pattern in source_patterns]
+            re_funcs = None
+            if source_patterns:
+                tokens = filter_lex(source_patterns)
+                parser = TokenParser(tokens)
+                re_funcs = [parser.buildFunc()]
+            else:
+                re_funcs = global_patterns
+
             for item in self._get_stream_items(source):
-                regexes = re_objects or global_patterns
-                if regexes:
-                    for pattern in regexes:
-                        if (item.title is not None and pattern.search(item.title)) or \
-                           (item.text is not None and pattern.search(item.text)) or \
-                           (item.link is not None and pattern.search(item.link)):
-                            self.add_item(item, pattern)
+                if re_funcs:
+                    for re_func in re_funcs: 
+                        if (item.title is not None and re_func(item.title)) or \
+                           (item.text is not None and re_func(item.text)) or \
+                           (item.link is not None and re_func(item.link)):
+                            self.add_item(item)
                             break
                 else:
                     # No filter patterns specified; simply print all items
