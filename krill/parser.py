@@ -1,3 +1,4 @@
+# Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 from lexer import (LPAREN,
                    RPAREN,
                    AND,
@@ -16,19 +17,22 @@ class Expr(object):
 
 class FilterExpr(Expr):
     def __init__(self, token):
-        self.filter = token[0]
+        self.filter = token[0].strip()
 
     def build(self):
         regex = re.compile(self.filter)
         
         def func(text):
-            match = regex.match(text)
+            match = regex.search(text)
             if match:
                 return match.group(0)
             else:
                 return None
 
         return func
+
+    def __str__(self):
+        return 'FilterExpr(%s)' % self.filter
 
 class BinaryExpr(Expr):
     def __init__(self, left, right):
@@ -44,6 +48,9 @@ class AndExpr(BinaryExpr):
             return left_func(text) and right_func(text)
         return func
 
+    def __str__(self):
+        return 'AndExpr(%s, %s)' % (self.left, self.right)
+
 class OrExpr(BinaryExpr):
     def build(self):
         def func(text):
@@ -53,11 +60,15 @@ class OrExpr(BinaryExpr):
             return left_func(text) or right_func(text)
         return func
 
+    def __str__(self):
+        return 'OrExpr(%s, %s)' % (self.left, self.right)
+
 class TokenParser(object):
     def __init__(self, tokens):
         self.tokens = tokens
-        self.pos = 0
+        self.pos = -1
         self.end = object()
+        self.result = None
 
     def next(self):
         if self.pos + 1 < len(self.tokens):
@@ -79,18 +90,27 @@ class TokenParser(object):
             self.error()
 
     def E(self):
-        self.P()
-        while self.next()[1] in (AND, OR):
+        arg1 = self.P()
+        if self.next()[1] in (AND, OR):
+            op = self.next()[1]
             self.consume()
-            self.P()
+            arg2 = self.P()
+            if op == AND:
+                return AndExpr(arg1, arg2)
+            elif op == OR:
+                return OrExpr(arg1, arg2)
+        return arg1
 
     def P(self):
+        expr = None
         if self.next()[1] == FILTER:
+            expr = FilterExpr(self.next())
             self.consume()
         elif self.next()[1] == LPAREN:
             self.consume()
-            self.E()
+            expr = self.E()
             self.expect(RPAREN)
         else:
             self.error()
+        return expr
 

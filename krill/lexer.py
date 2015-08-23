@@ -16,7 +16,8 @@ token_exprs = [
     (r'\)', RPAREN),
     (r'&&', AND),
     (r'\|\|', OR),
-    (r'(\S+\s*?)+?(?=\s*(\(|\)|&&|\|\|))', FILTER),
+    #(r'(\S+\s*?)+?(?=\s*($|\n|\(|\)|&&|\|\|))', FILTER),
+    (r'((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))', FILTER),
     ]
 
 def lex(characters, token_exprs):
