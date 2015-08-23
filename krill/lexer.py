@@ -3,17 +3,20 @@
 import sys
 import re
 
-RESERVED = 'RESERVED'
-KEYWORD = 'KEYWORD'
+AND = 'AND'
+OR = 'OR'
+FILTER = 'FILTER'
+LPAREN = 'LPAREN'
+RPAREN = 'RPAREN'
 
 token_exprs = [
     (r'[ \n\t]+', None),
     (r'#[^\n]*', None),
-    (r'\(', RESERVED),
-    (r'\)', RESERVED),
-    (r'&&', RESERVED),
-    (r'\|\|', RESERVED),
-    (r'(\S+\s*?)+?(?=\s*(\(|\)|&&|\|\|))', KEYWORD),
+    (r'\(', LPAREN),
+    (r'\)', RPAREN),
+    (r'&&', AND),
+    (r'\|\|', OR),
+    (r'(\S+\s*?)+?(?=\s*(\(|\)|&&|\|\|))', FILTER),
     ]
 
 def lex(characters, token_exprs):
