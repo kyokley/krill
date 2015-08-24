@@ -18,7 +18,7 @@ class FilterExpr(Expr):
         self.filter = token[0].strip()
 
     def build(self):
-        regex = re.compile(self.filter)
+        regex = re.compile(self.filter, re.IGNORECASE)
         
         def func(text):
             match = regex.search(text)
