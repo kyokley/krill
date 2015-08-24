@@ -21,8 +21,8 @@ import feedparser
 from bs4 import BeautifulSoup
 from blessings import Terminal
 
-from lexer import filter_lex
-from parser import TokenParser
+from krill.lexer import filter_lex
+from krill.parser import TokenParser
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
