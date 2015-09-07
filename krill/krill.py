@@ -143,6 +143,7 @@ class Application(object):
         self._known_items = set()
         self.args = args
         self.items = list()
+        self._queue = list()
 
     def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
@@ -221,17 +222,17 @@ class Application(object):
             text = text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
         return text
 
-    def _print_stream_item(cls, item, patterns=None):
-        print("")
+    def _queue_item(self, item, patterns=None):
+        self._queue.append("")
 
         term = Terminal()
         time_label = " on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
                                        term.yellow(item.time.strftime("%H:%M"))) \
                      if item.time is not None else ""
-        print("%s%s:" % (term.cyan(item.source), time_label))
+        self._queue.append("%s%s:" % (term.cyan(item.source), time_label))
 
         if item.title is not None:
-            print("   %s" % cls._highlight_pattern(item.title,
+            self._queue.append("   %s" % self._highlight_pattern(item.title,
                                                    patterns,
                                                    term.bold_black_on_bright_yellow,
                                                    term.bold))
@@ -253,18 +254,25 @@ class Application(object):
                              term.bright_magenta_underline("\\g<0>"), excerpt)
 
             # TODO: This can break previously applied highlighting (e.g. URLs)
-            excerpt = cls._highlight_pattern(excerpt,
+            excerpt = self._highlight_pattern(excerpt,
                                              patterns,
                                              term.black_on_bright_yellow)
 
-            print("   %s%s%s" % ("... " if clipped_left else "", excerpt,
+            self._queue.append("   %s%s%s" % ("... " if clipped_left else "", excerpt,
                                  " ..." if clipped_right else ""))
 
         if item.link is not None:
-            print("   %s" % cls._highlight_pattern(item.link,
+            self._queue.append("   %s" % self._highlight_pattern(item.link,
                                                    patterns,
                                                    term.black_on_bright_yellow_underline,
                                                    term.bright_blue_underline))
+
+    def flush_queue(self):
+        for text in self._queue:
+            for char in text:
+                time.sleep(.1)
+                print char,
+            print
 
     def update(self):
         # Reload sources and filters to allow for live editing
@@ -331,7 +339,8 @@ class Application(object):
         self.items.sort(key=lambda item: datetime.now() if item[0].time is None else item[0].time)
 
         for item in self.items:
-            self._print_stream_item(item[0], item[1])
+            self._queue_item(item[0], item[1])
+        self.flush_queue()
 
     def run(self):
         term = Terminal()
