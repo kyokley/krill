@@ -359,17 +359,17 @@ class Application(object):
         print("%s (%s)" % (term.bold("krill 0.3.0"),
                            term.underline("https://github.com/p-e-w/krill")))
 
-        self.update()
-        self.flush_queue(interval=0)
-        if self.args.update_interval > 0:
-            while True:
-                time.sleep(self.args.update_interval)
-                try:
+        try:
+            self.update()
+            self.flush_queue(interval=0)
+            if self.args.update_interval > 0:
+                while True:
+                    time.sleep(self.args.update_interval)
                     self.update()
                     self.flush_queue(interval=.1)
-                except KeyboardInterrupt:
-                    # Do not print stacktrace if user exits with Ctrl+C
-                    sys.exit()
+        except KeyboardInterrupt:
+            # Do not print stacktrace if user exits with Ctrl+C
+            sys.exit()
 
 def main():
     # Force UTF-8 encoding for stdout as we will be printing Unicode characters
