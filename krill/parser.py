@@ -1,5 +1,5 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
-from krill.lexer import (LPAREN,
+from .lexer import (LPAREN,
                    RPAREN,
                    AND,
                    OR,

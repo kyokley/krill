@@ -21,8 +21,10 @@ import feedparser
 from bs4 import BeautifulSoup
 from blessings import Terminal
 
-from krill.lexer import filter_lex
-from krill.parser import TokenParser
+from .lexer import filter_lex
+from .parser import TokenParser
+
+_invisible_codes = re.compile(r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
@@ -267,12 +269,23 @@ class Application(object):
                                                    term.black_on_bright_yellow_underline,
                                                    term.bright_blue_underline))
 
-    def flush_queue(self):
+    def flush_queue(self, interval=.1):
         for text in self._queue:
-            for char in text:
-                time.sleep(.1)
-                print char,
-            print
+            idx = 0
+            while idx < len(text):
+                time.sleep(interval)
+                match = re.search(_invisible_codes, text[idx:])
+                if match:
+                    end = idx + match.span()[1]
+                    sys.stdout.write(text[idx:end])
+                    idx = end
+                else:
+                    sys.stdout.write(text[idx])
+                    idx += 1
+                sys.stdout.flush()
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+        self._queue = list()
 
     def update(self):
         # Reload sources and filters to allow for live editing
@@ -340,22 +353,23 @@ class Application(object):
 
         for item in self.items:
             self._queue_item(item[0], item[1])
-        self.flush_queue()
 
     def run(self):
         term = Terminal()
         print("%s (%s)" % (term.bold("krill 0.3.0"),
                            term.underline("https://github.com/p-e-w/krill")))
 
-        while True:
-            try:
-                self.update()
-                if self.args.update_interval <= 0:
-                    break
+        self.update()
+        self.flush_queue(interval=0)
+        if self.args.update_interval > 0:
+            while True:
                 time.sleep(self.args.update_interval)
-            except KeyboardInterrupt:
-                # Do not print stacktrace if user exits with Ctrl+C
-                sys.exit()
+                try:
+                    self.update()
+                    self.flush_queue(interval=.1)
+                except KeyboardInterrupt:
+                    # Do not print stacktrace if user exits with Ctrl+C
+                    sys.exit()
 
 def main():
     # Force UTF-8 encoding for stdout as we will be printing Unicode characters
