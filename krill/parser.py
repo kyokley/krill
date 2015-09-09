@@ -1,11 +1,11 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
-from lexer import (LPAREN,
-                   RPAREN,
-                   AND,
-                   OR,
-                   NOT,
-                   FILTER,
-                   )
+from .lexer import (LPAREN,
+                    RPAREN,
+                    AND,
+                    OR,
+                    NOT,
+                    FILTER,
+                    )
 
 import re
 
