@@ -414,9 +414,7 @@ def main():
     if args.sources is None and args.sources_file is None:
         arg_parser.error("either a source URL (-s) or a sources file (-S) must be given")
 
-    term = Terminal()
-    with term.hidden_cursor():
-        Application(args).run()
+    Application(args).run()
 
 if __name__ == "__main__":
     main()
