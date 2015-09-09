@@ -24,6 +24,8 @@ from blessings import Terminal
 from .lexer import filter_lex
 from .parser import TokenParser
 
+base_type_speed = .01
+
 _invisible_codes = re.compile(r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
@@ -144,6 +146,15 @@ class Application(object):
     def __init__(self, args):
         self._known_items = set()
         self.args = args
+        if self.args.type_speed.lower() == 'fast':
+            self.type_speed = .01
+        elif self.args.type_speed.lower() == 'slow':
+            self.type_speed = .1
+        else:
+            speed = int(self.args.type_speed)
+            if speed < 0 or speed > 10:
+                raise ValueError('Speed is invalid. Got %s' % speed)
+            self.type_speed = speed * base_type_speed
         self.items = list()
         self._queue = list()
 
@@ -356,17 +367,18 @@ class Application(object):
 
     def run(self):
         term = Terminal()
-        print("%s (%s)" % (term.bold("krill 0.3.0"),
-                           term.underline("https://github.com/p-e-w/krill")))
+        print("%s (%s)" % (term.bold("krill++ 0.4.0"),
+                           term.underline("https://github.com/kyokley/krill")))
 
         try:
             self.update()
-            self.flush_queue(interval=0)
+            #self.flush_queue(interval=0)
+            self.flush_queue(interval=self.type_speed)
             if self.args.update_interval > 0:
                 while True:
                     time.sleep(self.args.update_interval)
                     self.update()
-                    self.flush_queue(interval=.1)
+                    self.flush_queue(interval=self.type_speed)
         except KeyboardInterrupt:
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
@@ -395,12 +407,16 @@ def main():
     arg_parser.add_argument("-u", "--update-interval", default=300, type=int,
             help="time between successive feed updates " +
                  "(default: 300 seconds, 0 for single pull only)", metavar="SECONDS")
+    arg_parser.add_argument("-t", "--type-speed", default='5', type=str,
+            help="text speed (0-10) 0 is fastest")
     args = arg_parser.parse_args()
 
     if args.sources is None and args.sources_file is None:
         arg_parser.error("either a source URL (-s) or a sources file (-S) must be given")
 
-    Application(args).run()
+    term = Terminal()
+    with term.hidden_cursor():
+        Application(args).run()
 
 if __name__ == "__main__":
     main()
