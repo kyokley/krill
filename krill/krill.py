@@ -372,8 +372,8 @@ class Application(object):
 
         try:
             self.update()
-            #self.flush_queue(interval=0)
-            self.flush_queue(interval=self.type_speed)
+            self.flush_queue(interval=0)
+            #self.flush_queue(interval=self.type_speed)
             if self.args.update_interval > 0:
                 while True:
                     time.sleep(self.args.update_interval)
