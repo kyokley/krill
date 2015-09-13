@@ -259,17 +259,17 @@ class Application(object):
 
             # Hashtag or mention
             excerpt = re.sub("(?<!\w)([#@])(\w+)",
-                             term.green("\\g<1>") + term.bright_green("\\g<2>"),
+                             term.green("\\g<1>") + term.green("\\g<2>"),
                              excerpt)
 
             # URL in one of the forms commonly encountered on the web
             excerpt = re.sub("(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
-                             term.bright_magenta_underline("\\g<0>"), excerpt)
+                             term.magenta_underline("\\g<0>"), excerpt)
 
             # TODO: This can break previously applied highlighting (e.g. URLs)
             excerpt = self._highlight_pattern(excerpt,
                                              patterns,
-                                             term.black_on_bright_yellow)
+                                             term.black_on_yellow)
 
             self._queue.append("   %s%s%s" % ("... " if clipped_left else "", excerpt,
                                  " ..." if clipped_right else ""))
@@ -277,8 +277,8 @@ class Application(object):
         if item.link is not None:
             self._queue.append("   %s" % self._highlight_pattern(item.link,
                                                    patterns,
-                                                   term.black_on_bright_yellow_underline,
-                                                   term.bright_blue_underline))
+                                                   term.black_on_yellow_underline,
+                                                   term.blue_underline))
 
     def flush_queue(self, interval=.1):
         for text in self._queue:
