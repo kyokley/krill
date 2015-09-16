@@ -5,6 +5,7 @@ from .lexer import (LPAREN,
                     OR,
                     NOT,
                     FILTER,
+                    QUOTE,
                     )
 
 import re
@@ -95,6 +96,13 @@ class NotExpr(Expr):
     def __str__(self):
         return 'NotExpr(%s)' % (self.input)
 
+class QuoteExpr(FilterExpr):
+    def __init__(self, filter):
+        self.filter = filter[0].strip().strip("'")
+
+    def __str__(self):
+        return 'QuoteExpr(%s)' % self.filter
+
 class TokenParser(object):
     def __init__(self, tokens):
         self.tokens = tokens
@@ -135,7 +143,10 @@ class TokenParser(object):
 
     def P(self):
         expr = None
-        if self.next()[1] == FILTER:
+        if self.next()[1] == QUOTE:
+            expr = QuoteExpr(self.next())
+            self.consume()
+        elif self.next()[1] == FILTER:
             expr = FilterExpr(self.next())
             self.consume()
         elif self.next()[1] == LPAREN:
