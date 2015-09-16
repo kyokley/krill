@@ -8,7 +8,7 @@ setup(
     version="0.4.0",
 
     description="Read and filter web feeds",
-    long_description="For a detailed description, see https://github.com/p-e-w/krill.",
+    long_description="For a detailed description, see https://github.com/kyokley/krill.",
 
     url="https://github.com/p-e-w/krill",
 
