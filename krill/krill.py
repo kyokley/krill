@@ -407,7 +407,7 @@ def main():
     arg_parser.add_argument("-u", "--update-interval", default=300, type=int,
             help="time between successive feed updates " +
                  "(default: 300 seconds, 0 for single pull only)", metavar="SECONDS")
-    arg_parser.add_argument("-t", "--type-speed", default='0', type=str,
+    arg_parser.add_argument("-t", "--text-speed", default='0', type=str,
             help="text speed (0-10) 10 is slowest. 0 represents no delay. Default is 0.")
     args = arg_parser.parse_args()
 

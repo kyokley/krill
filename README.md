@@ -43,6 +43,8 @@ krill [-h] [-s URL [URL ...]] [-S FILE] [-f REGEX [REGEX ...]]
   -u SECONDS, --update-interval SECONDS
                         time between successive feed updates (default: 300
                         seconds, 0 for single pull only)
+  -t INT, --text-speed INT
+                        text-speed (0-10). 10 is slowest. 0 represents no delay. Default is 0
 ```
 
 ### Example
