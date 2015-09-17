@@ -17,7 +17,8 @@ class TestReadSourceFile(unittest.TestCase):
                 'new horizons',
                 ]
         self.mock_myfile = mock.MagicMock()
-        self.application = Application(None)
+        self.args = mock.MagicMock()
+        self.application = Application(self.args)
 
     @mock.patch('krill.krill.open')
     def test_read_filters_file(self,
