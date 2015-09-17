@@ -146,15 +146,15 @@ class Application(object):
     def __init__(self, args):
         self._known_items = set()
         self.args = args
-        if self.args.type_speed.lower() == 'fast':
-            self.type_speed = .01
-        elif self.args.type_speed.lower() == 'slow':
-            self.type_speed = .1
+        if self.args.text_speed.lower() == 'fast':
+            self.text_speed = .01
+        elif self.args.text_speed.lower() == 'slow':
+            self.text_speed = .1
         else:
-            speed = int(self.args.type_speed)
+            speed = int(self.args.text_speed)
             if speed < 0 or speed > 10:
                 raise ValueError('Speed is invalid. Got %s' % speed)
-            self.type_speed = speed * base_type_speed
+            self.text_speed = speed * base_type_speed
         self.items = list()
         self._queue = list()
 
@@ -373,12 +373,11 @@ class Application(object):
         try:
             self.update()
             self.flush_queue(interval=0)
-            #self.flush_queue(interval=self.type_speed)
             if self.args.update_interval > 0:
                 while True:
                     time.sleep(self.args.update_interval)
                     self.update()
-                    self.flush_queue(interval=self.type_speed)
+                    self.flush_queue(interval=self.text_speed)
         except KeyboardInterrupt:
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
