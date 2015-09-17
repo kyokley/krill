@@ -10,10 +10,10 @@ setup(
     description="Read and filter web feeds",
     long_description="For a detailed description, see https://github.com/kyokley/krill.",
 
-    url="https://github.com/p-e-w/krill",
+    url="https://github.com/kyokley/krill",
 
-    author="Philipp Emanuel Weidmann",
-    author_email="pew@worldwidemann.com",
+    author="Kevin Yokley",
+    author_email="kyokley2@gmail.com",
 
     license="GPLv3",
 
