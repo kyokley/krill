@@ -6,6 +6,7 @@ from krill.lexer import (filter_lex,
                          FILTER,
                          LPAREN,
                          RPAREN,
+                         QUOTED_FILTER,
                          )
 
 class TestLexer(unittest.TestCase):
@@ -115,3 +116,23 @@ class TestLexer(unittest.TestCase):
                     ]
         actual = filter_lex(test_str)
         self.assertEqual(expected, actual)
+
+    def test_quoted_filter(self):
+        test_str = "a && (b || (c && d)) || '(e)'"
+        expected = [('a', FILTER),
+                    ('&&', AND),
+                    ('(', LPAREN),
+                    ('b', FILTER),
+                    ('||', OR),
+                    ('(', LPAREN),
+                    ('c', FILTER),
+                    ('&&', AND),
+                    ('d', FILTER),
+                    (')', RPAREN),
+                    (')', RPAREN),
+                    ('||', OR),
+                    ("'(e)'", QUOTED_FILTER),
+                    ]
+        actual = filter_lex(test_str)
+        self.assertEqual(expected, actual)
+

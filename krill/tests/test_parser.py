@@ -79,3 +79,10 @@ class TestParser(unittest.TestCase):
         expected = 'AndExpr(FilterExpr(a), OrExpr(FilterExpr(b), AndExpr(FilterExpr(c), FilterExpr(d))))'
         actual = str(TokenParser(tokens).E())
         self.assertEquals(expected, actual)
+
+    def test_quoted_filter(self):
+        test_str = "a && (b || (c && d)) || '(e)'"
+        tokens = filter_lex(test_str)
+        expected = 'OrExpr(AndExpr(FilterExpr(a), OrExpr(FilterExpr(b), AndExpr(FilterExpr(c), FilterExpr(d)))), QuotedFilterExpr((e)))'
+        actual = str(TokenParser(tokens).E())
+        self.assertEquals(expected, actual)
