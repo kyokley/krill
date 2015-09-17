@@ -9,7 +9,7 @@ NOT = 'NOT'
 FILTER = 'FILTER'
 LPAREN = 'LPAREN'
 RPAREN = 'RPAREN'
-QUOTE = 'QUOTE'
+QUOTED_FILTER = 'QUOTED_FILTER'
 
 token_exprs = [
     (r'[ \n\t]+', None),
@@ -19,7 +19,7 @@ token_exprs = [
     (r'&&', AND),
     (r'\|\|', OR),
     (r'!', NOT),
-    (r"'[^']*'", QUOTE),
+    (r"'[^']*'", QUOTED_FILTER),
     (r'((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))', FILTER),
     ]
 
