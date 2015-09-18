@@ -1,5 +1,4 @@
-[![PyPI](https://img.shields.io/pypi/v/krill.svg)](https://pypi.python.org/pypi/krill) ![Python versions](https://img.shields.io/pypi/pyversions/krill.svg) ![krill rocks](https://img.shields.io/badge/krill-rocks-ff69b4.svg)
-
+![Python versions](https://img.shields.io/pypi/pyversions/krill.svg) ![krill rocks](https://img.shields.io/badge/krill-rocks-ff69b4.svg) [![Build Status](https://travis-ci.org/kyokley/krill.svg)](https://travis-ci.org/kyokley/krill)
 
 # Want news? Just `krill` it!
 
