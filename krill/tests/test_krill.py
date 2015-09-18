@@ -2,6 +2,12 @@ import unittest
 import mock
 from krill.krill import Application
 
+from sys import version_info
+if version_info.major == 2:
+    import __builtin__ as builtins
+else:
+    import builtins
+
 class TestReadSourceFile(unittest.TestCase):
     def setUp(self):
         self.mock_readlines_sources = [
@@ -20,7 +26,7 @@ class TestReadSourceFile(unittest.TestCase):
         self.args = mock.MagicMock()
         self.application = Application(self.args)
 
-    @mock.patch('krill.krill.open')
+    @mock.patch.object(builtins, 'open')
     def test_read_filters_file(self,
                                mock_open,
                                ):
@@ -34,7 +40,7 @@ class TestReadSourceFile(unittest.TestCase):
                     ]
         self.assertEqual(actual, expected)
 
-    @mock.patch('krill.krill.open')
+    @mock.patch.object(builtins, 'open')
     def test_read_source_file(self, mock_open):
         self.mock_myfile.readlines.return_value = self.mock_readlines_sources
         mock_open.return_value.__enter__.return_value = self.mock_myfile
