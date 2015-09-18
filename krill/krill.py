@@ -57,7 +57,7 @@ class StreamParser(object):
             # For Python 2 and 3 compatibility
             to_unicode = unicode if sys.version_info[0] < 3 else str
             # Remove ellipsis characters added by Twitter
-            text = cls._html_to_text(to_unicode(tweet).replace(u"\u2026", ""))
+            text = cls._html_to_text(to_unicode(tweet).replace("\u2026", ""))
 
             link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
 
