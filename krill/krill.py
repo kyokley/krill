@@ -394,7 +394,7 @@ def main():
         prev_stdout = sys.stdout if sys.version_info[0] < 3 else sys.stdout.buffer
         sys.stdout = codecs.getwriter("utf-8")(prev_stdout)
 
-    arg_parser = argparse.ArgumentParser(prog="krill", description="Read and filter web feeds.")
+    arg_parser = argparse.ArgumentParser(prog="krill++", description="Read and filter web feeds.")
     arg_parser.add_argument("-s", "--sources", nargs="+",
             help="URLs to pull data from", metavar="URL")
     arg_parser.add_argument("-S", "--sources-file",

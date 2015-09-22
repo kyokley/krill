@@ -51,7 +51,7 @@ setup(
 
     entry_points={
         "console_scripts": [
-            "krill = krill.krill:main",
+            "krill++ = krill.krill:main",
         ],
     },
 )
