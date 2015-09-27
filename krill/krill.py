@@ -145,6 +145,7 @@ class TextExcerpter(object):
 
 class Application(object):
     def __init__(self, args):
+        self.item_count = 0
         self._known_items = set()
         self.args = args
         if self.args.text_speed.lower() == 'fast':
@@ -237,13 +238,16 @@ class Application(object):
         return text
 
     def _queue_item(self, item, patterns=None):
+        self.item_count += 1
         self._queue.append("")
 
         term = Terminal()
         time_label = " on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
                                        term.yellow(item.time.strftime("%H:%M"))) \
                      if item.time is not None else ""
-        self._queue.append("%s%s:" % (term.cyan(item.source), time_label))
+        self._queue.append("%s. %s%s:" % (self.item_count,
+                                          term.cyan(item.source),
+                                          time_label))
 
         if item.title is not None:
             self._queue.append("   %s" % self._highlight_pattern(item.title,
@@ -272,7 +276,7 @@ class Application(object):
                                              patterns,
                                              term.black_on_yellow)
 
-            self._queue.append("   %s%s%s" % ("... " if clipped_left else "", excerpt,
+            self._queue.append("    %s%s%s" % ("... " if clipped_left else "", excerpt,
                                  " ..." if clipped_right else ""))
 
         if item.link is not None:

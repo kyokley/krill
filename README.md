@@ -61,6 +61,7 @@ Inline and file specifications may be combined freely. If more than one filter i
 
 ## License
 
-Copyright &copy; 2015 Philipp Emanuel Weidmann (<pew@worldwidemann.com>)
+Copyright for portions of project krill++ are held by [Philipp Emanuel Weidmann , 2015] as part of project krill.
+All other copyright for project krill++ are held by [Kevin Yokley, 2015].
 
 Released under the terms of the [GNU General Public License, version 3](https://gnu.org/licenses/gpl.html)
