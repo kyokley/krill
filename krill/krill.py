@@ -171,12 +171,12 @@ class Application(object):
     @staticmethod
     def _print_error(error):
         print("")
-        print(Terminal().bright_red(error))
+        print(Terminal().red(error))
 
     @classmethod
     def _get_stream_items(cls, url):
         try:
-            data = requests.get(url).content
+            data = requests.get(url, timeout=5).content
         except Exception as error:
             cls._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
             # The problem might be temporary, so we do not exit
