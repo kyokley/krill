@@ -242,18 +242,21 @@ class Application(object):
         self._queue.append("")
 
         term = Terminal()
-        time_label = " on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
-                                       term.yellow(item.time.strftime("%H:%M"))) \
-                     if item.time is not None else ""
+        time_label = (" on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
+                                        term.yellow(item.time.strftime("%H:%M")))
+                      if item.time is not None else "")
         self._queue.append("%s. %s%s:" % (self.item_count,
                                           term.cyan(item.source),
                                           time_label))
 
+        indent = ' ' * (len(str(self.item_count)) + 2)
+
         if item.title is not None:
-            self._queue.append("   %s" % self._highlight_pattern(item.title,
-                                                   patterns,
-                                                   term.bold_black_on_bright_yellow,
-                                                   term.bold))
+            self._queue.append("%s%s" % (indent,
+                                         self._highlight_pattern(item.title,
+                                                                 patterns,
+                                                                 term.bold_black_on_bright_yellow,
+                                                                 term.bold)))
 
         if item.text is not None:
             (excerpt,
@@ -269,21 +272,24 @@ class Application(object):
 
             # URL in one of the forms commonly encountered on the web
             excerpt = re.sub("(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
-                             term.magenta_underline("\\g<0>"), excerpt)
+                             term.magenta_underline("\\g<0>"),
+                             excerpt)
 
-            # TODO: This can break previously applied highlighting (e.g. URLs)
             excerpt = self._highlight_pattern(excerpt,
-                                             patterns,
-                                             term.black_on_yellow)
+                                              patterns,
+                                              term.black_on_yellow)
 
-            self._queue.append("    %s%s%s" % ("... " if clipped_left else "", excerpt,
-                                 " ..." if clipped_right else ""))
+            self._queue.append("%s%s%s%s" % (indent,
+                                             "... " if clipped_left else "",
+                                             excerpt,
+                                             " ..." if clipped_right else ""))
 
         if item.link is not None:
-            self._queue.append("   %s" % self._highlight_pattern(item.link,
-                                                   patterns,
-                                                   term.black_on_yellow_underline,
-                                                   term.blue_underline))
+            self._queue.append("%s%s" % (indent,
+                                         self._highlight_pattern(item.link,
+                                                                 patterns,
+                                                                 term.black_on_yellow_underline,
+                                                                 term.blue_underline)))
 
     def flush_queue(self, interval=.1):
         for text in self._queue:
@@ -349,7 +355,7 @@ class Application(object):
 
             for item in self._get_stream_items(source):
                 if re_funcs:
-                    for re_func in re_funcs: 
+                    for re_func in re_funcs:
                         title_matches = item.title is not None and re_func(item.title) or (False, set())
                         text_matches = item.text is not None and re_func(item.text) or (False, set())
                         link_matches = item.link is not None and re_func(item.link) or (False, set())
