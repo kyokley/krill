@@ -61,7 +61,12 @@ class StreamParser(object):
 
             link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
 
-            yield StreamItem("%s (@%s)" % (name, username), timestamp, None, text, link)
+            yield StreamItem(("%s (@%s)" % (name, username) 
+                                if name else "@%s" % (username,)),
+                             timestamp,
+                             None,
+                             text,
+                             link)
 
     @classmethod
     def get_feed_items(cls, xml, url):
