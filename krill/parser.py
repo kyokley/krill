@@ -20,7 +20,7 @@ class FilterExpr(Expr):
 
     def build(self):
         regex = re.compile(self.filter, re.IGNORECASE)
-        
+
         def func(text):
             match = regex.search(text)
             if match:
