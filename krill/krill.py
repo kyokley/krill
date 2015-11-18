@@ -134,7 +134,7 @@ class TextExcerpter(object):
             remaining_length = max_length - (end - start)
             if remaining_length <= 0:
                 # Matches are never clipped
-                return text[start:end]
+                return text[start:end], False, False
 
             excerpt_start = max(start - (remaining_length // 2), 0)
             excerpt_end = min(end + (remaining_length - (start - excerpt_start)), len(text))
