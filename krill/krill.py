@@ -61,7 +61,7 @@ class StreamParser(object):
 
             link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
 
-            yield StreamItem(("%s (@%s)" % (name, username) 
+            yield StreamItem(("%s (@%s)" % (name, username)
                                 if name else "@%s" % (username,)),
                              timestamp,
                              None,
@@ -75,8 +75,8 @@ class StreamParser(object):
         feed_title = feed_data.feed.get("title", url)
 
         for entry in feed_data.entries:
-            timestamp = datetime.fromtimestamp(calendar.timegm(entry.published_parsed)) \
-                   if "published_parsed" in entry else None
+            timestamp = (datetime.fromtimestamp(calendar.timegm(entry.published_parsed))
+                            if "published_parsed" in entry and entry.published_parsed else None)
             title = entry.get("title")
             text = cls._html_to_text(entry.description) if "description" in entry else None
             link = entry.get("link")
