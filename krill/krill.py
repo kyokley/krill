@@ -28,15 +28,20 @@ from .parser import TokenParser
 base_type_speed = .01
 
 _invisible_codes = re.compile(r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
+_link_regex = re.compile(r"(https?://)")
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
+
+def fix_html(text):
+    return _link_regex.sub(r' \1', text)
+
 
 class StreamParser(object):
     @staticmethod
     def _html_to_text(html):
         # Hack to prevent Beautiful Soup from collapsing space-keeping tags
         # until no whitespace remains at all
-        html = re.sub("<(br|p|li)", " \\g<0>", html, flags=re.IGNORECASE)
+        html = re.sub(r"<(br|p|li)", " \\g<0>", html, flags=re.IGNORECASE)
         text = BeautifulSoup(html, "html.parser").get_text()
         # Idea from http://stackoverflow.com/a/1546251
         return " ".join(text.strip().split())
@@ -57,7 +62,7 @@ class StreamParser(object):
             # For Python 2 and 3 compatibility
             to_unicode = unicode if sys.version_info[0] < 3 else str
             # Remove ellipsis characters added by Twitter
-            text = cls._html_to_text(to_unicode(tweet).replace("\u2026", ""))
+            text = cls._html_to_text(to_unicode(tweet).replace("\u2026", " "))
 
             link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
 
@@ -65,7 +70,7 @@ class StreamParser(object):
                                 if name else "@%s" % (username,)),
                              timestamp,
                              None,
-                             text,
+                             fix_html(text),
                              link)
 
     @classmethod
@@ -88,18 +93,18 @@ class StreamParser(object):
 
             # At least one element must contain text for the item to be useful
             if title or text or link:
-                yield StreamItem(feed_title, timestamp, title, text, link)
+                yield StreamItem(feed_title, timestamp, title, fix_html(text), link)
 
 class TextExcerpter(object):
     # Clips the text to the position succeeding the first whitespace string
     @staticmethod
     def _clip_left(text):
-        return re.sub("^\S*\s*", "", text, 1)
+        return re.sub(r"^\S*\s*", "", text, 1)
 
     # Clips the text to the position preceding the last whitespace string
     @staticmethod
     def _clip_right(text):
-        return re.sub("\s*\S*$", "", text, 1)
+        return re.sub(r"\s*\S*$", "", text, 1)
 
     @staticmethod
     def _get_max_pattern_span(text, patterns):
@@ -271,12 +276,12 @@ class Application(object):
                                                         patterns)
 
             # Hashtag or mention
-            excerpt = re.sub("(?<!\w)([#@])(\w+)",
+            excerpt = re.sub(r"(?<!\w)([#@])(\w+)",
                              term.green("\\g<1>") + term.green("\\g<2>"),
                              excerpt)
 
             # URL in one of the forms commonly encountered on the web
-            excerpt = re.sub("(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
+            excerpt = re.sub(r"(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
                              term.magenta_underline("\\g<0>"),
                              excerpt)
 

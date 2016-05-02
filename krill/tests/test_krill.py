@@ -1,12 +1,30 @@
 import unittest
 import mock
-from krill.krill import Application
+from krill.krill import Application, fix_html
 
 from sys import version_info
 if version_info.major == 2:
     import __builtin__ as builtins
 else:
     import builtins
+
+class TestFixHtml(unittest.TestCase):
+    def test_fix_http(self):
+        test_str = 'This is a link.http://twitter.com'
+
+        expected = 'This is a link. http://twitter.com'
+        actual = fix_html(test_str)
+
+        self.assertEqual(expected, actual)
+
+    def test_fix_https(self):
+        test_str = 'This is a link.https://twitter.com'
+
+        expected = 'This is a link. https://twitter.com'
+        actual = fix_html(test_str)
+
+        self.assertEqual(expected, actual)
+
 
 class TestReadSourceFile(unittest.TestCase):
     def setUp(self):
