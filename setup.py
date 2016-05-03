@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 setup(
     name="krillpp",
 
-    version="0.4.0",
+    version="0.4.1",
 
     description="Read and filter web feeds",
     long_description="For a detailed description, see https://github.com/kyokley/krill.",
