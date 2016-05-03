@@ -388,7 +388,7 @@ class Application(object):
 
     def run(self):
         term = Terminal()
-        print("%s (%s)" % (term.bold("krill++ 0.4.0"),
+        print("%s (%s)" % (term.bold("krill++ 0.4.1"),
                            term.underline("https://github.com/kyokley/krill")))
 
         try:
