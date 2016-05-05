@@ -1,1 +1,2 @@
 - Fix links of type pic.twitter.com
+- Add word boundary to url fix regex
