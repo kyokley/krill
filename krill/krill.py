@@ -28,7 +28,7 @@ from .parser import TokenParser
 base_type_speed = .01
 
 _invisible_codes = re.compile(r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
-_link_regex = re.compile(r"(https?://)")
+_link_regex = re.compile(r"(?<!\s)(https?://|pics?.twitter.com)")
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
