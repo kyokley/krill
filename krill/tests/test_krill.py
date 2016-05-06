@@ -17,6 +17,22 @@ class TestFixLinks(unittest.TestCase):
 
         self.assertEqual(expected, actual)
 
+    def test_http_start_of_line(self):
+        test_str = 'http://twitter.com'
+
+        expected = 'http://twitter.com'
+        actual = fix_html(test_str)
+
+        self.assertEqual(expected, actual)
+
+    def test_https_start_of_line(self):
+        test_str = 'https://twitter.com'
+
+        expected = 'https://twitter.com'
+        actual = fix_html(test_str)
+
+        self.assertEqual(expected, actual)
+
     def test_fix_https(self):
         test_str = 'This is a link.https://twitter.com'
 
@@ -28,6 +44,14 @@ class TestFixLinks(unittest.TestCase):
     def test_fix_link(self):
         test_str = 'This is a link.pic.twitter.com'
         expected = 'This is a link. pic.twitter.com'
+        actual = fix_html(test_str)
+
+        self.assertEqual(expected, actual)
+
+    def test_link_start_of_line(self):
+        test_str = 'pic.twitter.com'
+
+        expected = 'pic.twitter.com'
         actual = fix_html(test_str)
 
         self.assertEqual(expected, actual)
