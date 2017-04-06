@@ -41,7 +41,6 @@ setup(
         "beautifulsoup4",
         "feedparser",
         "blessings",
-        'requests',
         'requests[security]',
     ],
     test_suite='nose.collector',
