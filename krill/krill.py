@@ -390,7 +390,7 @@ class Application(object):
             self._queue_item(item[0], item[1])
 
     def text_speed(self, interval_ave):
-        if self.text_speed_ave == 0:
+        if interval_ave == 0:
             return 0
         else:
             val = base_type_speed * (interval_ave + rand.normalvariate(0, 3.5))
