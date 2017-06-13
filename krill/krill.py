@@ -15,6 +15,7 @@ import codecs
 import argparse
 import calendar
 import requests
+import random
 from datetime import datetime
 from collections import namedtuple
 
@@ -24,6 +25,8 @@ from blessings import Terminal
 
 from .lexer import filter_lex
 from .parser import TokenParser
+
+rand = random.SystemRandom()
 
 base_type_speed = .01
 
@@ -158,15 +161,15 @@ class Application(object):
         self.item_count = 0
         self._known_items = set()
         self.args = args
-        if self.args.text_speed.lower() == 'fast':
-            self.text_speed = .01
-        elif self.args.text_speed.lower() == 'slow':
-            self.text_speed = .1
+        if self.args.text_speed_ave.lower() == 'fast':
+            self.text_speed_ave = 1
+        elif self.args.text_speed_ave.lower() == 'slow':
+            self.text_speed_ave = 10
         else:
-            speed = int(self.args.text_speed)
+            speed = int(self.args.text_speed_ave)
             if speed < 0 or speed > 10:
                 raise ValueError('Speed is invalid. Got %s' % speed)
-            self.text_speed = speed * base_type_speed
+            self.text_speed_ave = speed
         self.items = list()
         self._queue = list()
 
@@ -305,7 +308,7 @@ class Application(object):
         for text in self._queue:
             idx = 0
             while idx < len(text):
-                time.sleep(interval)
+                time.sleep(self.text_speed(interval))
                 match = re.search(_invisible_codes, text[idx:])
                 if match:
                     end = idx + match.span()[1]
@@ -386,6 +389,15 @@ class Application(object):
         for item in self.items:
             self._queue_item(item[0], item[1])
 
+    def text_speed(self, interval_ave):
+        if self.text_speed_ave == 0:
+            return 0
+        else:
+            val = base_type_speed * (interval_ave + rand.normalvariate(0, 3.5))
+            if val <= 0:
+                return base_type_speed * interval_ave
+            return val
+
     def run(self):
         term = Terminal()
         print("%s (%s)" % (term.bold("krill++ 0.4.1"),
@@ -393,12 +405,13 @@ class Application(object):
 
         try:
             self.update()
-            self.flush_queue(interval=0)
+            #self.flush_queue(interval=0)
+            self.flush_queue(interval=self.text_speed_ave)
             if self.args.update_interval > 0:
                 while True:
                     time.sleep(self.args.update_interval)
                     self.update()
-                    self.flush_queue(interval=self.text_speed)
+                    self.flush_queue(interval=self.text_speed_ave)
         except KeyboardInterrupt:
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
@@ -427,7 +440,7 @@ def main():
     arg_parser.add_argument("-u", "--update-interval", default=300, type=int,
             help="time between successive feed updates " +
                  "(default: 300 seconds, 0 for single pull only)", metavar="SECONDS")
-    arg_parser.add_argument("-t", "--text-speed", default='0', type=str,
+    arg_parser.add_argument("-t", "--text-speed-ave", default='0', type=str,
             help="text speed (0-10) 10 is slowest. 0 represents no delay. Default is 0.")
     args = arg_parser.parse_args()
 
