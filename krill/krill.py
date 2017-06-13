@@ -405,8 +405,7 @@ class Application(object):
 
         try:
             self.update()
-            #self.flush_queue(interval=0)
-            self.flush_queue(interval=self.text_speed_ave)
+            self.flush_queue(interval=0)
             if self.args.update_interval > 0:
                 while True:
                     time.sleep(self.args.update_interval)
