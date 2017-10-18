@@ -30,10 +30,38 @@ rand = random.SystemRandom()
 
 base_type_speed = .01
 
+REQUESTS_TIMEOUT = 5
+
 _invisible_codes = re.compile(r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
 _link_regex = re.compile(r"(?<=\S)(https?://|pics?.twitter.com)")
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
+
+HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
+HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
+HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
+NUMBER_OF_HN_STORIES = 10
+
+def hn_stories_generator():
+    resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
+    story_ids = resp.json()
+
+    resp = requests.get(HN_NEW_STORIES_URL, timeout=REQUESTS_TIMEOUT)
+    story_ids.extend(resp.json())
+
+    story_ids = list(set(story_ids))
+
+    rand.shuffle(story_ids)
+
+    for story_id in story_ids[:NUMBER_OF_HN_STORIES]:
+        resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
+        story = resp.json()
+        time = story.get('time')
+        yield StreamItem(story.get('by', ''),
+                         datetime.fromtimestamp(time) if time else '',
+                         story.get('title', ''),
+                         story.get('text', ''),
+                         story.get('url', ''))
 
 def fix_html(text):
     return _link_regex.sub(r' \1', text)
@@ -188,17 +216,20 @@ class Application(object):
 
     @classmethod
     def _get_stream_items(cls, url):
-        try:
-            data = requests.get(url, timeout=5).content
-        except Exception as error:
-            cls._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
-            # The problem might be temporary, so we do not exit
-            return list()
+        if 'hackernews' not in url.lower():
+            try:
+                data = requests.get(url, timeout=REQUESTS_TIMEOUT).content
+            except Exception as error:
+                cls._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
+                # The problem might be temporary, so we do not exit
+                return list()
 
-        if "//twitter.com/" in url:
-            return StreamParser.get_tweets(data)
+            if "//twitter.com/" in url:
+                return StreamParser.get_tweets(data)
+            else:
+                return StreamParser.get_feed_items(data, url)
         else:
-            return StreamParser.get_feed_items(data, url)
+            return hn_stories_generator()
 
     @classmethod
     def _read_sources_file(cls, filename):
