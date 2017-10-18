@@ -40,7 +40,7 @@ StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"
 HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
 HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
 HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
-NUMBER_OF_HN_STORIES = 10
+NUMBER_OF_HN_STORIES = 5
 
 def hn_stories_generator():
     resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
