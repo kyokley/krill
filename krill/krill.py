@@ -41,7 +41,7 @@ HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
 HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
 HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
 MIN_NUMBER_OF_HN_STORIES = 1
-MAX_NUMBER_OF_HN_STORIES = 15
+MAX_NUMBER_OF_HN_STORIES = 5
 
 def hn_stories_generator():
     resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
@@ -62,7 +62,13 @@ def hn_stories_generator():
                                      min(MAX_NUMBER_OF_HN_STORIES, number_of_stories))
 
     for story_id in story_ids[:number_of_stories]:
-        resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
+        try:
+            resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
+        except Exception as e:
+            term = Terminal()
+            print(term.red('Error getting HackerNews stories'))
+            print(term.red(e))
+            break
         story = resp.json()
         time = story.get('time')
         yield StreamItem(story.get('by', ''),
@@ -406,6 +412,9 @@ class Application(object):
                 re_funcs = global_patterns
 
             for item in self._get_stream_items(source):
+                if not item:
+                    continue
+
                 if re_funcs:
                     for re_func in re_funcs:
                         title_matches = item.title is not None and re_func(item.title) or (False, set())
