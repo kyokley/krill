@@ -67,7 +67,7 @@ def hn_stories_generator():
         except Exception as e:
             term = Terminal()
             print(term.red('Error getting HackerNews stories'))
-            print(term.red(e))
+            print(term.red(str(e)))
             break
         story = resp.json()
         time = story.get('time')
