@@ -76,7 +76,7 @@ def hn_stories_generator():
             yield StreamItem(story.get('by', ''),
                              datetime.fromtimestamp(time) if time else '',
                              story.get('title', ''),
-                             story.get('text', ''),
+                             story.get('text', '').replace('<p>', '\n'),
                              story.get('url', ''))
 
 def fix_html(text):
