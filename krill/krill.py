@@ -71,11 +71,13 @@ def hn_stories_generator():
             break
         story = resp.json()
         time = story.get('time')
-        yield StreamItem(story.get('by', ''),
-                         datetime.fromtimestamp(time) if time else '',
-                         story.get('title', ''),
-                         story.get('text', ''),
-                         story.get('url', ''))
+
+        if story.get('url'):
+            yield StreamItem(story.get('by', ''),
+                             datetime.fromtimestamp(time) if time else '',
+                             story.get('title', ''),
+                             story.get('text', ''),
+                             story.get('url', ''))
 
 def fix_html(text):
     return _link_regex.sub(r' \1', text)
