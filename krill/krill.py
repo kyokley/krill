@@ -44,11 +44,18 @@ MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
 
 def hn_stories_generator():
-    resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
-    story_ids = resp.json()
+    try:
+        resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
+        story_ids = resp.json()
+    except Exception as e:
+        print(Terminal().red(str(e)))
+        story_ids = []
 
-    resp = requests.get(HN_NEW_STORIES_URL, timeout=REQUESTS_TIMEOUT)
-    story_ids.extend(resp.json())
+    try:
+        resp = requests.get(HN_NEW_STORIES_URL, timeout=REQUESTS_TIMEOUT)
+        story_ids.extend(resp.json())
+    except Exception as e:
+        print(Terminal().red(str(e)))
 
     story_ids = list(set(story_ids))
 
