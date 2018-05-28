@@ -16,6 +16,7 @@ import argparse
 import calendar
 import requests
 import random
+import json
 from datetime import datetime
 from collections import namedtuple
 
@@ -306,26 +307,35 @@ class Application(object):
 
     def _queue_item(self, item, patterns=None):
         self.item_count += 1
-        self._queue.append("")
+
+        if not self.args.snapshot:
+            self._queue.append("")
+        else:
+            snapshot_item = dict()
 
         term = Terminal()
         time_label = (" on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
                                         term.yellow(item.time.strftime("%H:%M")))
                       if item.time is not None else "")
-        self._queue.append("%s. %s%s:" % (self.item_count,
-                                          term.cyan(item.source),
-                                          time_label))
+
+        if not self.args.snapshot:
+            self._queue.append("%s. %s%s:" % (self.item_count,
+                                              term.cyan(item.source),
+                                              time_label))
 
         indent = ' ' * (len(str(self.item_count)) + 2)
 
         if item.title is not None:
-            self._queue.append("%s%s" % (indent,
-                                         self._highlight_pattern(item.title,
-                                                                 patterns,
-                                                                 term.bold_black_on_bright_yellow,
-                                                                 term.bold)))
+            if not self.args.snapshot:
+                self._queue.append("%s%s" % (indent,
+                                             self._highlight_pattern(item.title,
+                                                                     patterns,
+                                                                     term.bold_black_on_bright_yellow,
+                                                                     term.bold)))
+            else:
+                snapshot_item['title'] = item.title
 
-        if item.text is not None:
+        if item.text is not None and not self.args.snapshot:
             (excerpt,
              clipped_left,
              clipped_right) = TextExcerpter.get_excerpt(item.text,
@@ -352,29 +362,38 @@ class Application(object):
                                              " ..." if clipped_right else ""))
 
         if item.link is not None:
-            self._queue.append("%s%s" % (indent,
-                                         self._highlight_pattern(item.link,
-                                                                 patterns,
-                                                                 term.black_on_yellow_underline,
-                                                                 term.blue_underline)))
+            if not self.args.snapshot:
+                self._queue.append("%s%s" % (indent,
+                                             self._highlight_pattern(item.link,
+                                                                     patterns,
+                                                                     term.black_on_yellow_underline,
+                                                                     term.blue_underline)))
+            else:
+                snapshot_item['link'] = item.link
+
+        if self.args.snapshot:
+            self._queue.append(snapshot_item)
 
     def flush_queue(self, interval=.1):
-        for text in self._queue:
-            idx = 0
-            while idx < len(text):
-                time.sleep(self.text_speed(interval))
-                match = re.search(_invisible_codes, text[idx:])
-                if match:
-                    end = idx + match.span()[1]
-                    sys.stdout.write(text[idx:end])
-                    idx = end
-                else:
-                    sys.stdout.write(text[idx])
-                    idx += 1
+        if not self.args.snapshot:
+            for text in self._queue:
+                idx = 0
+                while idx < len(text):
+                    time.sleep(self.text_speed(interval))
+                    match = re.search(_invisible_codes, text[idx:])
+                    if match:
+                        end = idx + match.span()[1]
+                        sys.stdout.write(text[idx:end])
+                        idx = end
+                    else:
+                        sys.stdout.write(text[idx])
+                        idx += 1
+                    sys.stdout.flush()
+                sys.stdout.write('\n')
                 sys.stdout.flush()
-            sys.stdout.write('\n')
-            sys.stdout.flush()
-        self._queue = list()
+            self._queue = list()
+        else:
+            print(json.dumps(self._queue))
 
     def update(self):
         # Reload sources and filters to allow for live editing
@@ -457,12 +476,17 @@ class Application(object):
 
     def run(self):
         term = Terminal()
-        print("%s (%s)" % (term.bold("krill++ 0.4.1"),
-                           term.underline("https://github.com/kyokley/krill")))
+        if not self.args.snapshot:
+            print("%s (%s)" % (term.bold("krill++ 0.4.1"),
+                               term.underline("https://github.com/kyokley/krill")))
 
         try:
             self.update()
             self.flush_queue(interval=0)
+
+            if self.args.snapshot:
+                return
+
             if self.args.update_interval > 0:
                 while True:
                     time.sleep(self.args.update_interval)
@@ -493,6 +517,8 @@ def main():
             help="patterns used to select feed items to print", metavar="REGEX")
     arg_parser.add_argument("-F", "--filters-file",
             help="file from which to load filter patterns", metavar="FILE")
+    arg_parser.add_argument("--snapshot", action='store_true',
+            help="return a single snapshot of all headlines in json format")
     arg_parser.add_argument("-u", "--update-interval", default=300, type=int,
             help="time between successive feed updates " +
                  "(default: 300 seconds, 0 for single pull only)", metavar="SECONDS")
