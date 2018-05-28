@@ -393,7 +393,7 @@ class Application(object):
                 sys.stdout.flush()
             self._queue = list()
         else:
-            print(json.dumps(self._queue))
+            print(json.dumps([x for x in self._queue if x.get('title')]))
 
     def update(self):
         # Reload sources and filters to allow for live editing
