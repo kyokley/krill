@@ -1,4 +1,4 @@
-FROM python:2.7-alpine
+FROM frolvlad/alpine-python3
 
 RUN apk add --no-cache \
         libffi-dev \
@@ -6,7 +6,8 @@ RUN apk add --no-cache \
         gcc \
 	    ca-certificates \
         musl-dev \
-        openssl-dev
+        openssl-dev \
+        python3-dev
 
 COPY . /app
 

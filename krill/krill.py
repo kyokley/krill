@@ -14,9 +14,11 @@ import time
 import codecs
 import argparse
 import calendar
-import requests
 import random
 import json
+import aiohttp
+import asyncio
+
 from datetime import datetime
 from collections import namedtuple
 
@@ -26,6 +28,8 @@ from blessings import Terminal
 
 from .lexer import filter_lex
 from .parser import TokenParser
+
+term = Terminal()
 
 rand = random.SystemRandom()
 
@@ -44,19 +48,19 @@ HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
 MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
 
-def hn_stories_generator():
+async def hn_stories_generator(session):
     try:
-        resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
-        story_ids = resp.json()
+        async with session.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT) as response:
+            story_ids = await response.json()
     except Exception as e:
-        print(Terminal().red(str(e)))
+        print(term.red(str(e)))
         story_ids = []
 
     try:
-        resp = requests.get(HN_NEW_STORIES_URL, timeout=REQUESTS_TIMEOUT)
-        story_ids.extend(resp.json())
+        async with session.get(HN_NEW_STORIES_URL, timeout=REQUESTS_TIMEOUT) as response:
+            story_ids.extend(await response.json())
     except Exception as e:
-        print(Terminal().red(str(e)))
+        print(term.red(str(e)))
 
     story_ids = list(set(story_ids))
 
@@ -71,21 +75,22 @@ def hn_stories_generator():
 
     for story_id in story_ids[:number_of_stories]:
         try:
-            resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
+            async with session.get(HN_STORY_URL_TEMPLATE.format(story_id), timeout=REQUESTS_TIMEOUT) as response:
+                story = await response.json()
         except Exception as e:
-            term = Terminal()
             print(term.red('Error getting HackerNews stories'))
             print(term.red(str(e)))
             break
-        story = resp.json()
+
         time = story.get('time')
 
         if story.get('url'):
             yield StreamItem(story.get('by', ''),
-                             datetime.fromtimestamp(time) if time else '',
-                             story.get('title', ''),
-                             story.get('text', '').replace('<p>', '\n'),
-                             story.get('url', ''))
+                    datetime.fromtimestamp(time) if time else '',
+                    story.get('title', ''),
+                    story.get('text', '').replace('<p>', '\n'),
+                    story.get('url', ''))
+
 
 def fix_html(text):
     return _link_regex.sub(r' \1', text)
@@ -114,10 +119,8 @@ class StreamParser(object):
             time_string = header.find("span", class_="_timestamp")["data-time"]
             timestamp = datetime.fromtimestamp(int(time_string))
 
-            # For Python 2 and 3 compatibility
-            to_unicode = unicode if sys.version_info[0] < 3 else str
             # Remove ellipsis characters added by Twitter
-            text = cls._html_to_text(to_unicode(tweet).replace("\u2026", " "))
+            text = cls._html_to_text(str(tweet).replace("\u2026", " "))
 
             link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
 
@@ -227,22 +230,21 @@ class Application(object):
 
     def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
-        if item_id in self._known_items:
-            # Do not print an item more than once
-            return
-        self._known_items.add(item_id)
-        self.items.append((item, patterns))
+        if item_id not in self._known_items:
+            self._known_items.add(item_id)
+            self.items.append((item, patterns))
 
     @staticmethod
     def _print_error(error):
         print("")
-        print(Terminal().red(error))
+        print(term.red(error))
 
     @classmethod
-    def _get_stream_items(cls, url):
+    async def _get_stream_items(cls, session, url):
         if 'hackernews' not in url.lower():
             try:
-                data = requests.get(url, timeout=REQUESTS_TIMEOUT).content
+                async with session.get(url, timeout=REQUESTS_TIMEOUT) as response:
+                    data = await response.text()
             except Exception as error:
                 cls._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
                 # The problem might be temporary, so we do not exit
@@ -253,7 +255,12 @@ class Application(object):
             else:
                 return StreamParser.get_feed_items(data, url)
         else:
-            return hn_stories_generator()
+            items = list()
+
+            async for story in hn_stories_generator(session):
+                items.append(story)
+
+            return items
 
     @classmethod
     def _read_sources_file(cls, filename):
@@ -313,7 +320,6 @@ class Application(object):
         else:
             snapshot_item = dict()
 
-        term = Terminal()
         time_label = (" on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
                                         term.yellow(item.time.strftime("%H:%M")))
                       if item.time is not None else "")
@@ -395,7 +401,7 @@ class Application(object):
         else:
             print(json.dumps([x for x in self._queue if x.get('title')]))
 
-    def update(self):
+    async def update(self, session):
         # Reload sources and filters to allow for live editing
         sources = dict()
         if self.args.sources is not None:
@@ -439,7 +445,9 @@ class Application(object):
             else:
                 re_funcs = global_patterns
 
-            for item in self._get_stream_items(source):
+            items = await self._get_stream_items(session, source)
+
+            for item in items:
                 if not item:
                     continue
 
@@ -474,29 +482,24 @@ class Application(object):
                 return base_type_speed * interval_ave
             return val
 
-    def run(self):
-        term = Terminal()
+    async def run(self, session):
         if not self.args.snapshot:
             print("%s (%s)" % (term.bold("krill++ 0.4.1"),
                                term.underline("https://github.com/kyokley/krill")))
 
-        try:
-            self.update()
-            self.flush_queue(interval=0)
+        await self.update(session)
+        self.flush_queue(interval=0)
 
-            if self.args.snapshot:
-                return
+        if self.args.snapshot:
+            return
 
-            if self.args.update_interval > 0:
-                while True:
-                    time.sleep(self.args.update_interval)
-                    self.update()
-                    self.flush_queue(interval=self.text_speed_ave)
-        except KeyboardInterrupt:
-            # Do not print stacktrace if user exits with Ctrl+C
-            sys.exit()
+        if self.args.update_interval > 0:
+            while True:
+                await asyncio.sleep(self.args.update_interval)
+                await self.update(session)
+                self.flush_queue(interval=self.text_speed_ave)
 
-def main():
+async def main():
     # Force UTF-8 encoding for stdout as we will be printing Unicode characters
     # which will fail with a UnicodeEncodeError if the encoding is not set,
     # e.g. because stdout is being piped.
@@ -529,7 +532,13 @@ def main():
     if args.sources is None and args.sources_file is None:
         arg_parser.error("either a source URL (-s) or a sources file (-S) must be given")
 
-    Application(args).run()
+    async with aiohttp.ClientSession() as session:
+        await Application(args).run(session)
 
-if __name__ == "__main__":
-    main()
+
+try:
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+except KeyboardInterrupt:
+    # Do not print stacktrace if user exits with Ctrl+C
+    sys.exit()

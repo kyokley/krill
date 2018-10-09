@@ -42,6 +42,8 @@ setup(
         "feedparser",
         "blessings",
         'requests[security]',
+        'aiohttp',
+        'aiodns',
     ],
     test_suite='nose.collector',
     tests_require=['nose',
