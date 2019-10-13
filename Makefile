@@ -19,7 +19,7 @@ build: ## Build prod container
 build-dev: ## Build dev container
 	docker-compose build --build-arg REQS= krill
 
-autoformat: build-dev ## autoformat source code with black
+autoformat: build-dev touch-history ## autoformat source code with black
 	docker-compose run --no-deps --rm krill /bin/bash -c "find . -name '*.py' | xargs isort && find . -name '*.py' | xargs black -S"
 
 touch-history:
