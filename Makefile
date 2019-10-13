@@ -20,7 +20,7 @@ touch-history:
 	@touch ~/.bash_history_krill
 
 publish: build
-	docker push kyokley/krill
+	docker push kyokley/krill-base
 
 run: build-dev ## Run krill++
 	docker-compose run --rm krill
