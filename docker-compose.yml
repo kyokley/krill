@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-    image: krill
+    image: kyokley/krill
     command: krill++ -u 30 -S /app/test_sources.txt
     volumes:
       - .:/app

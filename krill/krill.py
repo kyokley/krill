@@ -17,6 +17,9 @@ import random
 import re
 import sys
 import time
+import signal
+import subprocess
+
 from collections import namedtuple
 from datetime import datetime
 
@@ -46,6 +49,14 @@ HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
 HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
 MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
+
+
+class PromptTimeout(Exception):
+    pass
+
+
+class Quit(Exception):
+    pass
 
 
 def hn_stories_generator():
@@ -84,6 +95,8 @@ def hn_stories_generator():
             print(term.red(str(e)))
             break
         story = resp.json()
+        if not story:
+            continue
         time = story.get('time')
 
         if story.get('url'):
@@ -242,6 +255,7 @@ class Application(object):
             self.text_speed_ave = speed
         self.items = list()
         self._queue = list()
+        self._links = dict()
 
     def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
@@ -314,7 +328,7 @@ class Application(object):
         return [
             match.group(2).strip()
             for match in re.finditer(
-                "xmlUrl\s*=\s*([\"'])(.*?)\\1", opml, flags=re.IGNORECASE
+                r"""xmlUrl\s*=\s*(["'])(.*?)\1""", opml, flags=re.IGNORECASE
             )
         ]
 
@@ -405,6 +419,7 @@ class Application(object):
             )
 
         if item.link is not None:
+            self._links[self.item_count] = item.link
             if not self.args.snapshot:
                 self._queue.append(
                     "%s%s"
@@ -560,12 +575,49 @@ class Application(object):
 
             if self.args.update_interval > 0:
                 while True:
-                    time.sleep(self.args.update_interval)
+                    # time.sleep(self.args.update_interval)
+                    print()
+                    signal.signal(signal.SIGALRM, self.interrupted)
+                    try:
+                        signal.alarm(self.args.update_interval)
+                        done = False
+                        while not done:
+                            item_index = input('$> ')
+                            if item_index:
+                                if item_index.strip().lower() in ('q', 'quit', 'exit'):
+                                    raise Quit('All Done')
+
+                                int_item_index = int(item_index.strip())
+
+                                link = self._links.get(int_item_index)
+                                if link:
+                                    print(f'Opening {link}')
+                                    signal.alarm(0)
+                                    subprocess.run(['browsh', str(link)])
+                                    done = True
+                                else:
+                                    print(f'Could not find index {int_item_index}')
+                                    done = False
+                    except PromptTimeout:
+                        pass
+                    finally:
+                        signal.alarm(0)
+
                     self.update()
                     self.flush_queue(interval=self.text_speed_ave)
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, Quit):
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
+
+    def timeout_input(self):
+        try:
+            item_index = input('Enter index to read more: ')
+            return item_index
+        except Exception:
+            return
+
+    def interrupted(self, signum, frame):
+        raise PromptTimeout('we got a timeout')
 
 
 def main():
