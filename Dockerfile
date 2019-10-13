@@ -19,10 +19,12 @@ RUN apk update && apk add --no-cache \
 
 RUN curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
 
-COPY . /app
-
 WORKDIR /app
+COPY pyproject.toml /app/pyproject.toml
+COPY poetry.lock /app/poetry.lock
+
 RUN pip install pip --upgrade && \
     /root/.poetry/bin/poetry install ${REQS}
 
+COPY . /app
 CMD ["krill++", "-u", "30", "-S", "/app/test_sources.txt"]
