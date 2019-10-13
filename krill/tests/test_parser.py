@@ -1,6 +1,8 @@
 import unittest
+
 from krill.lexer import filter_lex
 from krill.parser import TokenParser
+
 
 class TestParser(unittest.TestCase):
     def test_simple(self):

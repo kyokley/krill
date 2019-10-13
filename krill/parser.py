@@ -1,18 +1,13 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
-from .lexer import (LPAREN,
-                    RPAREN,
-                    AND,
-                    OR,
-                    NOT,
-                    FILTER,
-                    QUOTED_FILTER,
-                    )
-
 import re
+
+from .lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
+
 
 class Expr(object):
     def build(self):
         return (False, set())
+
 
 class FilterExpr(Expr):
     def __init__(self, token):
@@ -33,10 +28,12 @@ class FilterExpr(Expr):
     def __str__(self):
         return 'FilterExpr(%s)' % self.filter
 
+
 class BinaryExpr(Expr):
     def __init__(self, left, right):
         self.left = left
         self.right = right
+
 
 class AndExpr(BinaryExpr):
     def build(self):
@@ -53,10 +50,12 @@ class AndExpr(BinaryExpr):
             if output:
                 matches.update(left_output[1], right_output[1])
             return (output, matches)
+
         return func
 
     def __str__(self):
         return 'AndExpr(%s, %s)' % (self.left, self.right)
+
 
 class OrExpr(BinaryExpr):
     def build(self):
@@ -73,10 +72,12 @@ class OrExpr(BinaryExpr):
             if output:
                 matches.update(left_output[1], right_output[1])
             return (output, matches)
+
         return func
 
     def __str__(self):
         return 'OrExpr(%s, %s)' % (self.left, self.right)
+
 
 class NotExpr(Expr):
     def __init__(self, input):
@@ -91,10 +92,12 @@ class NotExpr(Expr):
             matches = set()
 
             return (output, matches)
+
         return func
 
     def __str__(self):
         return 'NotExpr(%s)' % (self.input)
+
 
 class QuotedFilterExpr(FilterExpr):
     def __init__(self, filter):
@@ -102,6 +105,7 @@ class QuotedFilterExpr(FilterExpr):
 
     def __str__(self):
         return 'QuotedFilterExpr(%s)' % self.filter
+
 
 class TokenParser(object):
     def __init__(self, tokens):

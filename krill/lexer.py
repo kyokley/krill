@@ -1,7 +1,7 @@
 # Based on the blog post at http://jayconrod.com/posts/37/a-simple-interpreter-from-scratch-in-python-part-1
 
-import sys
 import re
+import sys
 
 AND = 'AND'
 OR = 'OR'
@@ -21,7 +21,8 @@ token_exprs = [
     (r'!', NOT),
     (r"'[^']*'", QUOTED_FILTER),
     (r'((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))', FILTER),
-    ]
+]
+
 
 def lex(characters, token_exprs):
     pos = 0
@@ -44,6 +45,7 @@ def lex(characters, token_exprs):
         else:
             pos = match.end(0)
     return tokens
+
 
 def filter_lex(characters):
     return lex(characters, token_exprs)

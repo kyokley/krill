@@ -8,41 +8,38 @@
 # Released under the terms of the GNU General Public License, version 3
 # (https://gnu.org/licenses/gpl.html)
 from __future__ import unicode_literals
+
+import argparse
+import calendar
+import codecs
+import json
+import random
 import re
 import sys
 import time
-import codecs
-import argparse
-import calendar
-import requests
-import random
-import json
-
-from datetime import datetime
 from collections import namedtuple
+from datetime import datetime
 
 import feedparser
-from bs4 import BeautifulSoup
+import requests
 from blessings import Terminal
+from bs4 import BeautifulSoup
 
 from .lexer import filter_lex
 from .parser import TokenParser
 
 rand = random.SystemRandom()
 
-base_type_speed = .01
+base_type_speed = 0.01
 
 REQUESTS_TIMEOUT = 5
 
 _invisible_codes = re.compile(
-    r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
+    r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
+)  # ANSI color codes
 _link_regex = re.compile(r"(?<=\S)(https?://|pics?.twitter.com)")
 
-StreamItem = namedtuple("StreamItem", ["source",
-                                       "time",
-                                       "title",
-                                       "text",
-                                       "link"])
+StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
 HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
 HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
@@ -75,7 +72,8 @@ def hn_stories_generator():
 
     number_of_stories = rand.randint(
         min(MIN_NUMBER_OF_HN_STORIES, number_of_stories),
-        min(MAX_NUMBER_OF_HN_STORIES, number_of_stories))
+        min(MAX_NUMBER_OF_HN_STORIES, number_of_stories),
+    )
 
     for story_id in story_ids[:number_of_stories]:
         try:
@@ -89,11 +87,13 @@ def hn_stories_generator():
         time = story.get('time')
 
         if story.get('url'):
-            yield StreamItem(story.get('by', ''),
-                             datetime.fromtimestamp(time) if time else '',
-                             story.get('title', ''),
-                             story.get('text', '').replace('<p>', '\n'),
-                             story.get('url', ''))
+            yield StreamItem(
+                story.get('by', ''),
+                datetime.fromtimestamp(time) if time else '',
+                story.get('title', ''),
+                story.get('text', '').replace('<p>', '\n'),
+                story.get('url', ''),
+            )
 
 
 def fix_html(text):
@@ -129,12 +129,13 @@ class StreamParser(object):
             tweet_href = header.find("a", class_="tweet-timestamp")["href"]
             link = f"https://twitter.com{tweet_href}"
 
-            yield StreamItem(("%s (@%s)" % (name, username)
-                              if name else "@%s" % (username,)),
-                             timestamp,
-                             None,
-                             fix_html(text),
-                             link)
+            yield StreamItem(
+                ("%s (@%s)" % (name, username) if name else "@%s" % (username,)),
+                timestamp,
+                None,
+                fix_html(text),
+                link,
+            )
 
     @classmethod
     def get_feed_items(cls, xml, url):
@@ -143,10 +144,15 @@ class StreamParser(object):
         feed_title = feed_data.feed.get("title", url)
 
         for entry in feed_data.entries:
-            timestamp = (datetime.fromtimestamp(calendar.timegm(entry.published_parsed))
-                            if "published_parsed" in entry and entry.published_parsed else None)
+            timestamp = (
+                datetime.fromtimestamp(calendar.timegm(entry.published_parsed))
+                if "published_parsed" in entry and entry.published_parsed
+                else None
+            )
             title = entry.get("title")
-            text = cls._html_to_text(entry.description) if "description" in entry else None
+            text = (
+                cls._html_to_text(entry.description) if "description" in entry else None
+            )
             link = entry.get("link")
 
             # Some feeds put the text in the title element
@@ -157,6 +163,7 @@ class StreamParser(object):
             # At least one element must contain text for the item to be useful
             if title or text or link:
                 yield StreamItem(feed_title, timestamp, title, fix_html(text), link)
+
 
 class TextExcerpter(object):
     # Clips the text to the position succeeding the first whitespace string
@@ -205,7 +212,9 @@ class TextExcerpter(object):
                 return text[start:end], False, False
 
             excerpt_start = max(start - (remaining_length // 2), 0)
-            excerpt_end = min(end + (remaining_length - (start - excerpt_start)), len(text))
+            excerpt_end = min(
+                end + (remaining_length - (start - excerpt_start)), len(text)
+            )
             # Adjust start of excerpt in case the string after the match was too short
             excerpt_start = max(excerpt_end - max_length, 0)
             excerpt = text[excerpt_start:excerpt_end]
@@ -215,6 +224,7 @@ class TextExcerpter(object):
                 excerpt = cls._clip_right(excerpt)
 
             return excerpt, excerpt_start > 0, excerpt_end < len(text)
+
 
 class Application(object):
     def __init__(self, args):
@@ -252,7 +262,9 @@ class Application(object):
             try:
                 data = requests.get(url, timeout=REQUESTS_TIMEOUT).content
             except Exception as error:
-                cls._print_error("Unable to retrieve data from URL '%s': %s" % (url, str(error)))
+                cls._print_error(
+                    "Unable to retrieve data from URL '%s': %s" % (url, str(error))
+                )
                 # The problem might be temporary, so we do not exit
                 return list()
 
@@ -286,6 +298,7 @@ class Application(object):
 
         # Discard empty lines and comments
         return [line for line in lines if line and not line.startswith("#")]
+
     _read_filters_file = _read_lines
 
     # Extracts feed URLs from an OPML file (https://en.wikipedia.org/wiki/OPML)
@@ -298,8 +311,12 @@ class Application(object):
             cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
             sys.exit(1)
 
-        return [match.group(2).strip() for match in
-                re.finditer("xmlUrl\s*=\s*([\"'])(.*?)\\1", opml, flags=re.IGNORECASE)]
+        return [
+            match.group(2).strip()
+            for match in re.finditer(
+                "xmlUrl\s*=\s*([\"'])(.*?)\\1", opml, flags=re.IGNORECASE
+            )
+        ]
 
     @staticmethod
     def _highlight_pattern(text, patterns, pattern_style, text_style=None):
@@ -322,67 +339,92 @@ class Application(object):
             snapshot_item = dict()
 
         term = Terminal()
-        time_label = (" on %s at %s" % (term.yellow(item.time.strftime("%a, %d %b %Y")),
-                                        term.yellow(item.time.strftime("%H:%M")))
-                      if item.time is not None else "")
+        time_label = (
+            " on %s at %s"
+            % (
+                term.yellow(item.time.strftime("%a, %d %b %Y")),
+                term.yellow(item.time.strftime("%H:%M")),
+            )
+            if item.time is not None
+            else ""
+        )
 
         if not self.args.snapshot:
-            self._queue.append("%s. %s%s:" % (self.item_count,
-                                              term.cyan(item.source),
-                                              time_label))
+            self._queue.append(
+                "%s. %s%s:" % (self.item_count, term.cyan(item.source), time_label)
+            )
 
         indent = ' ' * (len(str(self.item_count)) + 2)
 
         if item.title is not None:
             if not self.args.snapshot:
-                self._queue.append("%s%s" % (indent,
-                                             self._highlight_pattern(item.title,
-                                                                     patterns,
-                                                                     term.bold_black_on_bright_yellow,
-                                                                     term.bold)))
+                self._queue.append(
+                    "%s%s"
+                    % (
+                        indent,
+                        self._highlight_pattern(
+                            item.title,
+                            patterns,
+                            term.bold_black_on_bright_yellow,
+                            term.bold,
+                        ),
+                    )
+                )
             else:
                 snapshot_item['title'] = item.title
 
         if item.text is not None and not self.args.snapshot:
-            (excerpt,
-             clipped_left,
-             clipped_right) = TextExcerpter.get_excerpt(item.text,
-                                                        300,
-                                                        patterns)
+            (excerpt, clipped_left, clipped_right) = TextExcerpter.get_excerpt(
+                item.text, 300, patterns
+            )
 
             # Hashtag or mention
-            excerpt = re.sub(r"(?<!\w)([#@])(\w+)",
-                             term.green("\\g<1>") + term.green("\\g<2>"),
-                             excerpt)
+            excerpt = re.sub(
+                r"(?<!\w)([#@])(\w+)",
+                term.green("\\g<1>") + term.green("\\g<2>"),
+                excerpt,
+            )
 
             # URL in one of the forms commonly encountered on the web
-            excerpt = re.sub(r"(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
-                             term.magenta_underline("\\g<0>"),
-                             excerpt)
+            excerpt = re.sub(
+                r"(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
+                term.magenta_underline("\\g<0>"),
+                excerpt,
+            )
 
-            excerpt = self._highlight_pattern(excerpt,
-                                              patterns,
-                                              term.black_on_yellow)
+            excerpt = self._highlight_pattern(excerpt, patterns, term.black_on_yellow)
 
-            self._queue.append("%s%s%s%s" % (indent,
-                                             "... " if clipped_left else "",
-                                             excerpt,
-                                             " ..." if clipped_right else ""))
+            self._queue.append(
+                "%s%s%s%s"
+                % (
+                    indent,
+                    "... " if clipped_left else "",
+                    excerpt,
+                    " ..." if clipped_right else "",
+                )
+            )
 
         if item.link is not None:
             if not self.args.snapshot:
-                self._queue.append("%s%s" % (indent,
-                                             self._highlight_pattern(item.link,
-                                                                     patterns,
-                                                                     term.black_on_yellow_underline,
-                                                                     term.blue_underline)))
+                self._queue.append(
+                    "%s%s"
+                    % (
+                        indent,
+                        self._highlight_pattern(
+                            item.link,
+                            patterns,
+                            term.black_on_yellow_underline,
+                            term.blue_underline,
+                        ),
+                    )
+                )
             else:
                 snapshot_item['link'] = item.link
 
         if self.args.snapshot:
             self._queue.append(snapshot_item)
 
-    def flush_queue(self, interval=.1):
+    def flush_queue(self, interval=0.1):
         if not self.args.snapshot:
             for text in self._queue:
                 idx = 0
@@ -432,8 +474,10 @@ class Application(object):
                 parser = TokenParser(tokens)
                 global_patterns.append(parser.buildFunc())
             except Exception as error:
-                self._print_error("Error while compiling regular expression '%s': %s" %
-                                  (filter_string, str(error)))
+                self._print_error(
+                    "Error while compiling regular expression '%s': %s"
+                    % (filter_string, str(error))
+                )
                 sys.exit(1)
 
         self.items = list()
@@ -453,14 +497,26 @@ class Application(object):
 
                 if re_funcs:
                     for re_func in re_funcs:
-                        title_matches = item.title is not None and re_func(item.title) or (False, set())
-                        text_matches = item.text is not None and re_func(item.text) or (False, set())
-                        link_matches = item.link is not None and re_func(item.link) or (False, set())
-                        if (title_matches[0] or
-                                text_matches[0] or
-                                link_matches[0]):
+                        title_matches = (
+                            item.title is not None
+                            and re_func(item.title)
+                            or (False, set())
+                        )
+                        text_matches = (
+                            item.text is not None
+                            and re_func(item.text)
+                            or (False, set())
+                        )
+                        link_matches = (
+                            item.link is not None
+                            and re_func(item.link)
+                            or (False, set())
+                        )
+                        if title_matches[0] or text_matches[0] or link_matches[0]:
                             matched_texts = set()
-                            matched_texts.update(title_matches[1], text_matches[1], link_matches[1])
+                            matched_texts.update(
+                                title_matches[1], text_matches[1], link_matches[1]
+                            )
                             self.add_item(item, matched_texts)
                             break
                 else:
@@ -468,7 +524,9 @@ class Application(object):
                     self.add_item(item)
 
         # Print latest news last
-        self.items.sort(key=lambda item: datetime.now() if item[0].time is None else item[0].time)
+        self.items.sort(
+            key=lambda item: datetime.now() if item[0].time is None else item[0].time
+        )
 
         for item in self.items:
             self._queue_item(item[0], item[1])
@@ -485,8 +543,13 @@ class Application(object):
     def run(self):
         term = Terminal()
         if not self.args.snapshot:
-            print("%s (%s)" % (term.bold("krill++ 0.4.1"),
-                               term.underline("https://github.com/kyokley/krill")))
+            print(
+                "%s (%s)"
+                % (
+                    term.bold("krill++ 0.4.1"),
+                    term.underline("https://github.com/kyokley/krill"),
+                )
+            )
 
         try:
             self.update()
@@ -504,6 +567,7 @@ class Application(object):
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
 
+
 def main():
     # Force UTF-8 encoding for stdout as we will be printing Unicode characters
     # which will fail with a UnicodeEncodeError if the encoding is not set,
@@ -515,29 +579,62 @@ def main():
         prev_stdout = sys.stdout if sys.version_info[0] < 3 else sys.stdout.buffer
         sys.stdout = codecs.getwriter("utf-8")(prev_stdout)
 
-    arg_parser = argparse.ArgumentParser(prog="krill++", description="Read and filter web feeds.")
-    arg_parser.add_argument("-s", "--sources", nargs="+",
-            help="URLs to pull data from", metavar="URL")
-    arg_parser.add_argument("-S", "--sources-file",
-            help="file from which to load source URLs " +
-                 "(OPML format assumed if filename ends with \".opml\")", metavar="FILE")
-    arg_parser.add_argument("-f", "--filters", nargs="+",
-            help="patterns used to select feed items to print", metavar="REGEX")
-    arg_parser.add_argument("-F", "--filters-file",
-            help="file from which to load filter patterns", metavar="FILE")
-    arg_parser.add_argument("--snapshot", action='store_true',
-            help="return a single snapshot of all headlines in json format")
-    arg_parser.add_argument("-u", "--update-interval", default=300, type=int,
-            help="time between successive feed updates " +
-                 "(default: 300 seconds, 0 for single pull only)", metavar="SECONDS")
-    arg_parser.add_argument("-t", "--text-speed-ave", default='0', type=str,
-            help="text speed (0-10) 10 is slowest. 0 represents no delay. Default is 0.")
+    arg_parser = argparse.ArgumentParser(
+        prog="krill++", description="Read and filter web feeds."
+    )
+    arg_parser.add_argument(
+        "-s", "--sources", nargs="+", help="URLs to pull data from", metavar="URL"
+    )
+    arg_parser.add_argument(
+        "-S",
+        "--sources-file",
+        help="file from which to load source URLs "
+        + "(OPML format assumed if filename ends with \".opml\")",
+        metavar="FILE",
+    )
+    arg_parser.add_argument(
+        "-f",
+        "--filters",
+        nargs="+",
+        help="patterns used to select feed items to print",
+        metavar="REGEX",
+    )
+    arg_parser.add_argument(
+        "-F",
+        "--filters-file",
+        help="file from which to load filter patterns",
+        metavar="FILE",
+    )
+    arg_parser.add_argument(
+        "--snapshot",
+        action='store_true',
+        help="return a single snapshot of all headlines in json format",
+    )
+    arg_parser.add_argument(
+        "-u",
+        "--update-interval",
+        default=300,
+        type=int,
+        help="time between successive feed updates "
+        + "(default: 300 seconds, 0 for single pull only)",
+        metavar="SECONDS",
+    )
+    arg_parser.add_argument(
+        "-t",
+        "--text-speed-ave",
+        default='0',
+        type=str,
+        help="text speed (0-10) 10 is slowest. 0 represents no delay. Default is 0.",
+    )
     args = arg_parser.parse_args()
 
     if args.sources is None and args.sources_file is None:
-        arg_parser.error("either a source URL (-s) or a sources file (-S) must be given")
+        arg_parser.error(
+            "either a source URL (-s) or a sources file (-S) must be given"
+        )
 
     Application(args).run()
+
 
 if __name__ == "__main__":
     main()
