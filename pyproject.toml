@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "krill"
+version = "0.1.0"
+description = ""
+authors = ["Kevin Yokley <kyokley2@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+requests = "^2.22"
+beautifulsoup4 = "^4.8"
+feedparser = "^5.2"
+blessings = "^1.7"
+
+[tool.poetry.dev-dependencies]
+bpython = {version = "^0.18.0", allows-prereleases = true}
+black = {version = "^18.3-alpha.0", allows-prereleases = true}
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"

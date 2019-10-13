@@ -1,16 +1,27 @@
-FROM python:2.7-alpine
+FROM python:3.7-alpine
+
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ARG REQS=--no-dev
+
+ENV VIRTUAL_ENV=/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN apk add --no-cache \
         libffi-dev \
-		git \
+        git \
         gcc \
-	    ca-certificates \
+        ca-certificates \
         musl-dev \
         openssl-dev
+
+RUN curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
 
 COPY . /app
 
 WORKDIR /app
-RUN pip install .
+RUN pip install pip --upgrade && \
+    /root/.poetry/bin/poetry install ${REQS}
 
 CMD ["krill++", "-u", "30", "-S", "/app/test_sources.txt"]
