@@ -114,15 +114,14 @@ class StreamParser(object):
             time_string = header.find("span", class_="_timestamp")["data-time"]
             timestamp = datetime.fromtimestamp(int(time_string))
 
-            # For Python 2 and 3 compatibility
-            to_unicode = unicode if sys.version_info[0] < 3 else str
             # Remove ellipsis characters added by Twitter
-            text = cls._html_to_text(to_unicode(tweet).replace("\u2026", " "))
+            text = cls._html_to_text(str(tweet).replace("\u2026", " "))
 
-            link = "https://twitter.com%s" % header.find("a", class_="tweet-timestamp")["href"]
+            tweet_href = header.find("a", class_="tweet-timestamp")["href"]
+            link = f"https://twitter.com{tweet_href}"
 
             yield StreamItem(("%s (@%s)" % (name, username)
-                                if name else "@%s" % (username,)),
+                              if name else "@%s" % (username,)),
                              timestamp,
                              None,
                              fix_html(text),
