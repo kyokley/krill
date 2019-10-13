@@ -17,6 +17,7 @@ import calendar
 import requests
 import random
 import json
+
 from datetime import datetime
 from collections import namedtuple
 
@@ -33,16 +34,22 @@ base_type_speed = .01
 
 REQUESTS_TIMEOUT = 5
 
-_invisible_codes = re.compile(r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
+_invisible_codes = re.compile(
+    r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)")  # ANSI color codes
 _link_regex = re.compile(r"(?<=\S)(https?://|pics?.twitter.com)")
 
-StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
+StreamItem = namedtuple("StreamItem", ["source",
+                                       "time",
+                                       "title",
+                                       "text",
+                                       "link"])
 
 HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
 HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
 HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
 MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
+
 
 def hn_stories_generator():
     try:
@@ -66,8 +73,9 @@ def hn_stories_generator():
     if not number_of_stories:
         yield ()
 
-    number_of_stories = rand.randint(min(MIN_NUMBER_OF_HN_STORIES, number_of_stories),
-                                     min(MAX_NUMBER_OF_HN_STORIES, number_of_stories))
+    number_of_stories = rand.randint(
+        min(MIN_NUMBER_OF_HN_STORIES, number_of_stories),
+        min(MAX_NUMBER_OF_HN_STORIES, number_of_stories))
 
     for story_id in story_ids[:number_of_stories]:
         try:
@@ -86,6 +94,7 @@ def hn_stories_generator():
                              story.get('title', ''),
                              story.get('text', '').replace('<p>', '\n'),
                              story.get('url', ''))
+
 
 def fix_html(text):
     return _link_regex.sub(r' \1', text)
