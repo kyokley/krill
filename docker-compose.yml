@@ -9,4 +9,4 @@ services:
     command: krill++ -u 30 -S /app/test_sources.txt
     volumes:
       - .:/app
-      - ~/.bash_history_krill:~/.bash_history
+      - ~/.bash_history_krill:/root/.bash_history
