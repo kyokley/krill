@@ -19,7 +19,7 @@ autoformat: build-dev touch-history ## autoformat source code with black
 touch-history:
 	@touch ~/.bash_history_krill
 
-publish: build
+publish: build ## Build and push docker image to dockerhub
 	docker push kyokley/krill-base
 
 run: build-dev ## Run krill++
