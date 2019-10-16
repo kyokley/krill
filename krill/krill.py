@@ -594,22 +594,34 @@ class Application(object):
                         signal.alarm(self.args.update_interval)
                         done = False
                         while not done:
-                            item_index = input('$> ')
-                            if item_index:
+                            input_str = input('$> ')
+                            item_indices = input_str.split()
+
+                            links = []
+                            for item_index in item_indices:
                                 if item_index.strip().lower() in ('q', 'quit', 'exit'):
                                     raise Quit('All Done')
 
-                                int_item_index = int(item_index.strip())
+                                try:
+                                    int_item_index = int(item_index.strip())
+                                except ValueError:
+                                    continue
 
                                 link = self._links.get(int_item_index)
-                                if link:
+                                links.append(link)
+
+                            if links:
+                                signal.alarm(0)
+                                for link in links:
                                     print(f'Opening {link}')
-                                    signal.alarm(0)
-                                    subprocess.run(['browsh', str(link)])
-                                    done = True
-                                else:
-                                    print(f'Could not find index {int_item_index}')
-                                    done = False
+
+                                cmd = ['browsh']
+                                cmd.extend(links)
+
+                                subprocess.run(cmd)
+                                done = True
+                            else:
+                                done = False
 
                         if done:
                             # If we're here, we must be returning from browsh
