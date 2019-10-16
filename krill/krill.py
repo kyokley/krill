@@ -15,11 +15,10 @@ import codecs
 import json
 import random
 import re
-import sys
-import time
 import signal
 import subprocess
-
+import sys
+import time
 from collections import namedtuple
 from datetime import datetime
 
@@ -51,62 +50,15 @@ MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
 
 
+TERMINAL = Terminal()
+
+
 class PromptTimeout(Exception):
     pass
 
 
 class Quit(Exception):
     pass
-
-
-def hn_stories_generator():
-    try:
-        resp = requests.get(HN_TOP_STORIES_URL, timeout=REQUESTS_TIMEOUT)
-        story_ids = resp.json()
-    except Exception as e:
-        print(Terminal().red(str(e)))
-        story_ids = []
-
-    try:
-        resp = requests.get(HN_NEW_STORIES_URL, timeout=REQUESTS_TIMEOUT)
-        story_ids.extend(resp.json())
-    except Exception as e:
-        print(Terminal().red(str(e)))
-
-    story_ids = list(set(story_ids))
-
-    rand.shuffle(story_ids)
-
-    number_of_stories = len(story_ids)
-    if not number_of_stories:
-        yield ()
-
-    number_of_stories = rand.randint(
-        min(MIN_NUMBER_OF_HN_STORIES, number_of_stories),
-        min(MAX_NUMBER_OF_HN_STORIES, number_of_stories),
-    )
-
-    for story_id in story_ids[:number_of_stories]:
-        try:
-            resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
-        except Exception as e:
-            term = Terminal()
-            print(term.red('Error getting HackerNews stories'))
-            print(term.red(str(e)))
-            break
-        story = resp.json()
-        if not story:
-            continue
-        time = story.get('time')
-
-        if story.get('url'):
-            yield StreamItem(
-                story.get('by', ''),
-                datetime.fromtimestamp(time) if time else '',
-                story.get('title', ''),
-                story.get('text', '').replace('<p>', '\n'),
-                story.get('url', ''),
-            )
 
 
 def fix_html(text):
@@ -267,8 +219,58 @@ class Application(object):
 
     @staticmethod
     def _print_error(error):
-        print("")
-        print(Terminal().red(error))
+        print()
+        print(TERMINAL.red(error))
+
+    @classmethod
+    def _hn_story_ids(cls, url):
+        try:
+            resp = requests.get(url, timeout=REQUESTS_TIMEOUT)
+            story_ids = resp.json()
+        except Exception as e:
+            cls._print_error(str(e))
+            story_ids = []
+        return story_ids
+
+    @classmethod
+    def hn_stories_generator(cls):
+        story_ids = set()
+        story_ids.update(cls._hn_story_ids(HN_TOP_STORIES_URL))
+        story_ids.update(cls._hn_story_ids(HN_NEW_STORIES_URL))
+
+        story_ids = list(story_ids)
+
+        rand.shuffle(story_ids)
+
+        number_of_stories = len(story_ids)
+        if not number_of_stories:
+            yield ()
+
+        number_of_stories = rand.randint(
+            min(MIN_NUMBER_OF_HN_STORIES, number_of_stories),
+            min(MAX_NUMBER_OF_HN_STORIES, number_of_stories),
+        )
+
+        for story_id in story_ids[:number_of_stories]:
+            try:
+                resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
+            except Exception as e:
+                cls._print_error('Error getting HackerNews stories')
+                cls._print_error(str(e))
+                break
+            story = resp.json()
+            if not story:
+                continue
+            time = story.get('time')
+
+            if story.get('url'):
+                yield StreamItem(
+                    story.get('by', ''),
+                    datetime.fromtimestamp(time) if time else '',
+                    story.get('title', ''),
+                    story.get('text', '').replace('<p>', '\n'),
+                    story.get('url', ''),
+                )
 
     @classmethod
     def _get_stream_items(cls, url):
@@ -287,7 +289,7 @@ class Application(object):
             else:
                 return StreamParser.get_feed_items(data, url)
         else:
-            return hn_stories_generator()
+            return cls.hn_stories_generator()
 
     @classmethod
     def _read_sources_file(cls, filename):
@@ -352,12 +354,11 @@ class Application(object):
         else:
             snapshot_item = dict()
 
-        term = Terminal()
         time_label = (
             " on %s at %s"
             % (
-                term.yellow(item.time.strftime("%a, %d %b %Y")),
-                term.yellow(item.time.strftime("%H:%M")),
+                TERMINAL.yellow(item.time.strftime("%a, %d %b %Y")),
+                TERMINAL.yellow(item.time.strftime("%H:%M")),
             )
             if item.time is not None
             else ""
@@ -365,7 +366,7 @@ class Application(object):
 
         if not self.args.snapshot:
             self._queue.append(
-                "%s. %s%s:" % (self.item_count, term.cyan(item.source), time_label)
+                "%s. %s%s:" % (self.item_count, TERMINAL.cyan(item.source), time_label)
             )
 
         indent = ' ' * (len(str(self.item_count)) + 2)
@@ -379,8 +380,8 @@ class Application(object):
                         self._highlight_pattern(
                             item.title,
                             patterns,
-                            term.bold_black_on_bright_yellow,
-                            term.bold,
+                            TERMINAL.bold_black_on_bright_yellow,
+                            TERMINAL.bold,
                         ),
                     )
                 )
@@ -395,18 +396,20 @@ class Application(object):
             # Hashtag or mention
             excerpt = re.sub(
                 r"(?<!\w)([#@])(\w+)",
-                term.green("\\g<1>") + term.green("\\g<2>"),
+                TERMINAL.green("\\g<1>") + TERMINAL.green("\\g<2>"),
                 excerpt,
             )
 
             # URL in one of the forms commonly encountered on the web
             excerpt = re.sub(
                 r"(\w+://)?[\w.-]+\.[a-zA-Z]{2,4}(?(1)|/)[\w#?&=%/:.-]*",
-                term.magenta_underline("\\g<0>"),
+                TERMINAL.magenta_underline("\\g<0>"),
                 excerpt,
             )
 
-            excerpt = self._highlight_pattern(excerpt, patterns, term.black_on_yellow)
+            excerpt = self._highlight_pattern(
+                excerpt, patterns, TERMINAL.black_on_yellow
+            )
 
             self._queue.append(
                 "%s%s%s%s"
@@ -428,8 +431,8 @@ class Application(object):
                         self._highlight_pattern(
                             item.link,
                             patterns,
-                            term.black_on_yellow_underline,
-                            term.blue_underline,
+                            TERMINAL.black_on_yellow_underline,
+                            TERMINAL.blue_underline,
                         ),
                     )
                 )
@@ -460,7 +463,7 @@ class Application(object):
         else:
             print(json.dumps([x for x in self._queue if x.get('title')]))
 
-    def update(self):
+    def _sources(self):
         # Reload sources and filters to allow for live editing
         sources = dict()
         if self.args.sources is not None:
@@ -472,10 +475,14 @@ class Application(object):
                     sources[source] = list()
             else:
                 sources.update(self._read_sources_file(self.args.sources_file))
+
         if not sources:
             self._print_error("No source specifications found")
             sys.exit(1)
 
+        return sources
+
+    def _global_patterns(self):
         filters = list()
         if self.args.filters is not None:
             filters.extend(self.args.filters)
@@ -494,6 +501,13 @@ class Application(object):
                     % (filter_string, str(error))
                 )
                 sys.exit(1)
+
+        return global_patterns
+
+    def update(self):
+        sources = self._sources()
+
+        global_patterns = self._global_patterns()
 
         self.items = list()
 
@@ -556,13 +570,12 @@ class Application(object):
             return val
 
     def run(self):
-        term = Terminal()
         if not self.args.snapshot:
             print(
                 "%s (%s)"
                 % (
-                    term.bold("krill++ 0.4.1"),
-                    term.underline("https://github.com/kyokley/krill"),
+                    TERMINAL.bold("krill++ 0.4.1"),
+                    TERMINAL.underline("https://github.com/kyokley/krill"),
                 )
             )
 
@@ -575,7 +588,6 @@ class Application(object):
 
             if self.args.update_interval > 0:
                 while True:
-                    # time.sleep(self.args.update_interval)
                     print()
                     signal.signal(signal.SIGALRM, self.interrupted)
                     try:
@@ -598,6 +610,11 @@ class Application(object):
                                 else:
                                     print(f'Could not find index {int_item_index}')
                                     done = False
+
+                        if done:
+                            # If we're here, we must be returning from browsh
+                            # Return to the prompt
+                            continue
                     except PromptTimeout:
                         pass
                     finally:
@@ -628,7 +645,7 @@ def main():
     # http://stackoverflow.com/a/4546129 for extensive discussions of the issue.
     if sys.stdout.encoding != "UTF-8":
         # For Python 2 and 3 compatibility
-        prev_stdout = sys.stdout if sys.version_info[0] < 3 else sys.stdout.buffer
+        prev_stdout = sys.stdout.buffer
         sys.stdout = codecs.getwriter("utf-8")(prev_stdout)
 
     arg_parser = argparse.ArgumentParser(
