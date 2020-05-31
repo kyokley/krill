@@ -30,5 +30,5 @@ publish: build ## Build and push docker image to dockerhub
 run: ## Run krill++
 	docker run --rm -it -v $$(pwd)/krill:/app/krill kyokley/krill-base
 
-tests: ## Run test cases
+tests: build-dev ## Run test cases
 	docker run --rm -t -v $$(pwd)/krill:/app/krill kyokley/krill-base /bin/bash -c "pytest"
