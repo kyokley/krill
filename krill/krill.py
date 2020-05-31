@@ -276,7 +276,10 @@ class Application(object):
     def _get_stream_items(cls, url):
         if 'hackernews' not in url.lower():
             try:
-                data = requests.get(url, timeout=REQUESTS_TIMEOUT).content
+                headers = {
+                    'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
+                }
+                data = requests.get(url, timeout=REQUESTS_TIMEOUT, headers=headers).content
             except Exception as error:
                 cls._print_error(
                     "Unable to retrieve data from URL '%s': %s" % (url, str(error))
