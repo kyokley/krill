@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED 1
 ENV VIRTUAL_ENV=/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV PATH="$PATH:/root/.poetry/bin"
 
 RUN apt-get update && apt-get install -y \
         firefox-esr \
@@ -36,4 +37,4 @@ FROM base AS dev
 RUN /root/.poetry/bin/poetry install
 
 COPY . /app
-RUN python setup.py install
+RUN python setup.py develop
