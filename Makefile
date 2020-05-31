@@ -5,16 +5,16 @@ list: ## List all targets
 	@make -qp | awk -F':' '/^[a-zA-Z0-9][^$$#\/\t=]*:([^=]|$$)/ {split($$1,A,/ /);for(i in A)print A[i]}'
 
 shell: build-dev ## Open a shell
-	docker run --rm -it -v $$(pwd):/app -v ~/.bash_history_krill:/root/.bash_history krill /bin/bash
+	docker run --rm -it -v $$(pwd):/app -v ~/.bash_history_krill:/root/.bash_history kyokley/krill-base /bin/bash
 
 build: ## Build prod container
-	docker build -t kyokley/krill-base .
+	docker build --target=prod -t kyokley/krill-base .
 
 build-dev: ## Build dev container
-	docker build --build-arg REQS= -t kyokley/krill-base .
+	docker build --target=dev -t kyokley/krill-base .
 
 autoformat: build-dev touch-history ## autoformat source code with black
-	docker run --no-deps --rm -v $$(pwd):/app krill /bin/bash -c "find . -name '*.py' | xargs isort && find . -name '*.py' | xargs black -S"
+	docker run --rm -v $$(pwd):/app kyokley/krill-base /bin/bash -c "find . -name '*.py' | xargs isort && find . -name '*.py' | xargs black -S"
 
 touch-history:
 	@touch ~/.bash_history_krill
