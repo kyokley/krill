@@ -15,8 +15,6 @@ import codecs
 import json
 import random
 import re
-import signal
-import subprocess
 import sys
 import time
 from collections import namedtuple
@@ -276,7 +274,10 @@ class Application(object):
     def _get_stream_items(cls, url):
         if 'hackernews' not in url.lower():
             try:
-                data = requests.get(url, timeout=REQUESTS_TIMEOUT).content
+                headers = {
+                    'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
+                }
+                data = requests.get(url, timeout=REQUESTS_TIMEOUT, headers=headers).content
             except Exception as error:
                 cls._print_error(
                     "Unable to retrieve data from URL '%s': %s" % (url, str(error))
@@ -589,64 +590,13 @@ class Application(object):
             if self.args.update_interval > 0:
                 while True:
                     print()
-                    signal.signal(signal.SIGALRM, self.interrupted)
-                    try:
-                        signal.alarm(self.args.update_interval)
-                        done = False
-                        while not done:
-                            input_str = input('$> ')
-                            item_indices = input_str.split()
-
-                            links = []
-                            for item_index in item_indices:
-                                if item_index.strip().lower() in ('q', 'quit', 'exit'):
-                                    raise Quit('All Done')
-
-                                try:
-                                    int_item_index = int(item_index.strip())
-                                except ValueError:
-                                    continue
-
-                                link = self._links.get(int_item_index)
-                                links.append(link)
-
-                            if links:
-                                signal.alarm(0)
-                                for link in links:
-                                    print(f'Opening {link}')
-
-                                cmd = ['browsh']
-                                cmd.extend(links)
-
-                                subprocess.run(cmd)
-                                done = True
-                            else:
-                                done = False
-
-                        if done:
-                            # If we're here, we must be returning from browsh
-                            # Return to the prompt
-                            continue
-                    except PromptTimeout:
-                        pass
-                    finally:
-                        signal.alarm(0)
+                    time.sleep(self.args.update_interval)
 
                     self.update()
                     self.flush_queue(interval=self.text_speed_ave)
         except (KeyboardInterrupt, Quit):
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
-
-    def timeout_input(self):
-        try:
-            item_index = input('Enter index to read more: ')
-            return item_index
-        except Exception:
-            return
-
-    def interrupted(self, signum, frame):
-        raise PromptTimeout('we got a timeout')
 
 
 def main():

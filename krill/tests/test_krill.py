@@ -1,13 +1,8 @@
 import unittest
-from sys import version_info
 
-import mock
+from unittest import mock
 from krill.krill import Application, fix_html
-
-if version_info.major == 2:
-    import __builtin__ as builtins
-else:
-    import builtins
+import builtins
 
 
 class TestFixLinks(unittest.TestCase):
