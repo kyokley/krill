@@ -1,3 +1,5 @@
+.PHONY: run publish touch-history autoformat build-dev build shell list help
+
 help: ## This help
 	@grep -F "##" $(MAKEFILE_LIST) | grep -vF '@grep -F "##" $$(MAKEFILE_LIST)' | sed -r 's/(:).*##/\1/' | sort
 
