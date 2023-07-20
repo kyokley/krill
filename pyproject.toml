@@ -11,7 +11,7 @@ requests = "^2.31"
 beautifulsoup4 = "^4.8"
 feedparser = "^6.0"
 blessings = "^1.7"
-cryptography = "^39.0"
+cryptography = "^41.0"
 
 [tool.poetry.dev-dependencies]
 bpython = {version = "^0.18.0", allow-prereleases = true}
