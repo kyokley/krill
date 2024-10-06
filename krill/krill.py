@@ -9,6 +9,8 @@
 # (https://gnu.org/licenses/gpl.html)
 from __future__ import unicode_literals
 
+import asyncio
+import httpx
 import argparse
 import calendar
 import codecs
@@ -16,12 +18,10 @@ import json
 import random
 import re
 import sys
-import time
 from collections import namedtuple
 from datetime import datetime
 
 import feedparser
-import requests
 from blessings import Terminal
 from bs4 import BeautifulSoup
 
@@ -59,13 +59,13 @@ class Quit(Exception):
     pass
 
 
-def fix_html(text):
+async def fix_html(text):
     return _link_regex.sub(r' \1', text)
 
 
-class StreamParser(object):
+class StreamParser:
     @staticmethod
-    def _html_to_text(html):
+    async def _html_to_text(html):
         # Hack to prevent Beautiful Soup from collapsing space-keeping tags
         # until no whitespace remains at all
         html = re.sub(r"<(br|p|li)", " \\g<0>", html, flags=re.IGNORECASE)
@@ -74,7 +74,7 @@ class StreamParser(object):
         return " ".join(text.strip().split())
 
     @classmethod
-    def get_tweets(cls, html):
+    async def get_tweets(cls, html):
         document = BeautifulSoup(html, "html.parser")
 
         for tweet in document.find_all("p", class_="tweet-text"):
@@ -87,7 +87,7 @@ class StreamParser(object):
             timestamp = datetime.fromtimestamp(int(time_string))
 
             # Remove ellipsis characters added by Twitter
-            text = cls._html_to_text(str(tweet).replace("\u2026", " "))
+            text = await cls._html_to_text(str(tweet).replace("\u2026", " "))
 
             tweet_href = header.find("a", class_="tweet-timestamp")["href"]
             link = f"https://twitter.com{tweet_href}"
@@ -96,12 +96,12 @@ class StreamParser(object):
                 ("%s (@%s)" % (name, username) if name else "@%s" % (username,)),
                 timestamp,
                 None,
-                fix_html(text),
+                await fix_html(text),
                 link,
             )
 
     @classmethod
-    def get_feed_items(cls, xml, url):
+    async def get_feed_items(cls, xml, url):
         feed_data = feedparser.parse(xml)
         # Default to feed URL if no title element is present
         feed_title = feed_data.feed.get("title", url)
@@ -113,9 +113,11 @@ class StreamParser(object):
                 else None
             )
             title = entry.get("title")
-            text = (
-                cls._html_to_text(entry.description) if "description" in entry else None
-            )
+            if 'description' in entry:
+                text = await cls._html_to_text(entry.description)
+            else:
+                text = None
+
             link = entry.get("link")
 
             # Some feeds put the text in the title element
@@ -125,22 +127,22 @@ class StreamParser(object):
 
             # At least one element must contain text for the item to be useful
             if title or text or link:
-                yield StreamItem(feed_title, timestamp, title, fix_html(text), link)
+                yield StreamItem(feed_title, timestamp, title, await fix_html(text), link)
 
 
-class TextExcerpter(object):
+class TextExcerpter:
     # Clips the text to the position succeeding the first whitespace string
     @staticmethod
-    def _clip_left(text):
+    async def _clip_left(text):
         return re.sub(r"^\S*\s*", "", text, 1)
 
     # Clips the text to the position preceding the last whitespace string
     @staticmethod
-    def _clip_right(text):
+    async def _clip_right(text):
         return re.sub(r"\s*\S*$", "", text, 1)
 
     @staticmethod
-    def _get_max_pattern_span(text, patterns):
+    async def _get_max_pattern_span(text, patterns):
         min_start, max_end = None, None
         if patterns is not None:
             for pattern in patterns:
@@ -161,13 +163,13 @@ class TextExcerpter(object):
     # Returns a portion of text at most max_length in length
     # and containing the first match of pattern, if specified
     @classmethod
-    def get_excerpt(cls, text, max_length, patterns=None):
+    async def get_excerpt(cls, text, max_length, patterns=None):
         if len(text) <= max_length:
             return text, False, False
 
-        start, end = cls._get_max_pattern_span(text, patterns)
+        start, end = await cls._get_max_pattern_span(text, patterns)
         if start is None and end is None:
-            return cls._clip_right(text[:max_length]), False, True
+            return await cls._clip_right(text[:max_length]), False, True
         else:
             remaining_length = max_length - (end - start)
             if remaining_length <= 0:
@@ -182,14 +184,14 @@ class TextExcerpter(object):
             excerpt_start = max(excerpt_end - max_length, 0)
             excerpt = text[excerpt_start:excerpt_end]
             if excerpt_start > 0:
-                excerpt = cls._clip_left(excerpt)
+                excerpt = await cls._clip_left(excerpt)
             if excerpt_end < len(text):
-                excerpt = cls._clip_right(excerpt)
+                excerpt = await cls._clip_right(excerpt)
 
             return excerpt, excerpt_start > 0, excerpt_end < len(text)
 
 
-class Application(object):
+class Application:
     def __init__(self, args):
         self.item_count = 0
         self._known_items = set()
@@ -207,7 +209,7 @@ class Application(object):
         self._queue = list()
         self._links = dict()
 
-    def add_item(self, item, patterns=None):
+    async def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
         if item_id in self._known_items:
             # Do not print an item more than once
@@ -216,25 +218,34 @@ class Application(object):
         self.items.append((item, patterns))
 
     @staticmethod
-    def _print_error(error):
+    async def _print_error(error):
         print()
         print(TERMINAL.red(error))
 
     @classmethod
-    def _hn_story_ids(cls, url):
+    async def _hn_story_ids(cls, url, cb=None):
         try:
-            resp = requests.get(url, timeout=REQUESTS_TIMEOUT)
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
             story_ids = resp.json()
         except Exception as e:
-            cls._print_error(str(e))
+            await cls._print_error(str(e))
             story_ids = []
+
+        if cb and story_ids:
+            cb(story_ids)
         return story_ids
 
     @classmethod
-    def hn_stories_generator(cls):
+    async def hn_stories_generator(cls):
         story_ids = set()
-        story_ids.update(cls._hn_story_ids(HN_TOP_STORIES_URL))
-        story_ids.update(cls._hn_story_ids(HN_NEW_STORIES_URL))
+
+        def extend_story_ids(ids):
+            story_ids.update(ids)
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(cls._hn_story_ids(HN_TOP_STORIES_URL, cb=extend_story_ids))
+            tg.create_task(cls._hn_story_ids(HN_NEW_STORIES_URL, cb=extend_story_ids))
 
         story_ids = list(story_ids)
 
@@ -251,52 +262,59 @@ class Application(object):
 
         for story_id in story_ids[:number_of_stories]:
             try:
-                resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id),
-                                    timeout=REQUESTS_TIMEOUT)
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(HN_STORY_URL_TEMPLATE.format(story_id),
+                                            timeout=REQUESTS_TIMEOUT)
             except Exception as e:
-                cls._print_error('Error getting HackerNews stories')
-                cls._print_error(str(e))
+                await cls._print_error('Error getting HackerNews stories')
+                await cls._print_error(str(e))
                 break
             story = resp.json()
             if not story:
                 continue
-            time = story.get('time')
+            story_time = story.get('time')
 
             if story.get('url'):
                 yield StreamItem(
                     story.get('by', ''),
-                    datetime.fromtimestamp(time) if time else '',
+                    datetime.fromtimestamp(story_time) if story_time else '',
                     story.get('title', ''),
                     story.get('text', '').replace('<p>', '\n'),
                     story.get('url', ''),
                 )
 
     @classmethod
-    def _get_stream_items(cls, url):
+    async def _get_stream_items(cls, url):
         if 'hackernews' not in url.lower():
             try:
-                headers = {
-                    'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
-                }
-                data = requests.get(url, timeout=REQUESTS_TIMEOUT, headers=headers).content
+                async with httpx.AsyncClient() as client:
+                    headers = {
+                        'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
+                    }
+                    data = (await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)).content
+
+                if "//twitter.com/" in url:
+                    async for stream_data in StreamParser.get_tweets(data):
+                        yield stream_data
+                else:
+                    async for stream_data in StreamParser.get_feed_items(data, url):
+                        yield stream_data
+
             except Exception as error:
-                cls._print_error(
+                await cls._print_error(
                     "Unable to retrieve data from URL '%s': %s" % (url, str(error))
                 )
                 # The problem might be temporary, so we do not exit
-                return list()
+                yield list()
 
-            if "//twitter.com/" in url:
-                return StreamParser.get_tweets(data)
-            else:
-                return StreamParser.get_feed_items(data, url)
         else:
-            return cls.hn_stories_generator()
+            async for stream_data in cls.hn_stories_generator():
+                yield stream_data
 
     @classmethod
-    def _read_sources_file(cls, filename):
+    async def _read_sources_file(cls, filename):
         output = dict()
-        lines = cls._read_lines(filename)
+        lines = await cls._read_lines(filename)
         for line in lines:
             data = line.partition(' ')
             if data[1] and data[2]:
@@ -306,12 +324,12 @@ class Application(object):
         return output
 
     @classmethod
-    def _read_lines(cls, filename):
+    async def _read_lines(cls, filename):
         try:
             with open(filename, "r") as myfile:
                 lines = [line.strip() for line in myfile.readlines()]
         except Exception as error:
-            cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
+            await cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
             sys.exit(1)
 
         # Discard empty lines and comments
@@ -321,12 +339,12 @@ class Application(object):
 
     # Extracts feed URLs from an OPML file (https://en.wikipedia.org/wiki/OPML)
     @classmethod
-    def _read_opml_file(cls, filename):
+    async def _read_opml_file(cls, filename):
         try:
             with open(filename, "r") as myfile:
                 opml = myfile.read()
         except Exception as error:
-            cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
+            await cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
             sys.exit(1)
 
         return [
@@ -337,7 +355,7 @@ class Application(object):
         ]
 
     @staticmethod
-    def _highlight_pattern(text, patterns, pattern_style, text_style=None):
+    async def _highlight_pattern(text, patterns, pattern_style, text_style=None):
         if patterns is None:
             return text if text_style is None else text_style(text)
         if text_style is None:
@@ -348,7 +366,7 @@ class Application(object):
             text = text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
         return text
 
-    def _queue_item(self, item, patterns=None):
+    async def _queue_item(self, item, patterns=None):
         self.item_count += 1
 
         if not self.args.snapshot:
@@ -379,7 +397,7 @@ class Application(object):
                     "%s%s"
                     % (
                         indent,
-                        self._highlight_pattern(
+                        await self._highlight_pattern(
                             item.title,
                             patterns,
                             TERMINAL.bold_black_on_bright_yellow,
@@ -391,7 +409,7 @@ class Application(object):
                 snapshot_item['title'] = item.title
 
         if item.text is not None and not self.args.snapshot:
-            (excerpt, clipped_left, clipped_right) = TextExcerpter.get_excerpt(
+            (excerpt, clipped_left, clipped_right) = await TextExcerpter.get_excerpt(
                 item.text, 300, patterns
             )
 
@@ -409,7 +427,7 @@ class Application(object):
                 excerpt,
             )
 
-            excerpt = self._highlight_pattern(
+            excerpt = await self._highlight_pattern(
                 excerpt, patterns, TERMINAL.black_on_yellow
             )
 
@@ -430,7 +448,7 @@ class Application(object):
                     "%s%s"
                     % (
                         indent,
-                        self._highlight_pattern(
+                        await self._highlight_pattern(
                             item.link,
                             patterns,
                             TERMINAL.black_on_yellow_underline,
@@ -444,12 +462,12 @@ class Application(object):
         if self.args.snapshot:
             self._queue.append(snapshot_item)
 
-    def flush_queue(self, interval=0.1):
+    async def flush_queue(self, interval=0.1):
         if not self.args.snapshot:
             for text in self._queue:
                 idx = 0
                 while idx < len(text):
-                    time.sleep(self.text_speed(interval))
+                    await asyncio.sleep(await self.text_speed(interval))
                     match = re.search(_invisible_codes, text[idx:])
                     if match:
                         end = idx + match.span()[1]
@@ -465,7 +483,7 @@ class Application(object):
         else:
             print(json.dumps([x for x in self._queue if x.get('title')]))
 
-    def _sources(self):
+    async def _sources(self):
         # Reload sources and filters to allow for live editing
         sources = dict()
         if self.args.sources is not None:
@@ -473,23 +491,23 @@ class Application(object):
                 sources[source] = list()
         if self.args.sources_file is not None:
             if self.args.sources_file.endswith(".opml"):
-                for source in self._read_opml_file(self.args.sources_file):
+                for source in await self._read_opml_file(self.args.sources_file):
                     sources[source] = list()
             else:
-                sources.update(self._read_sources_file(self.args.sources_file))
+                sources.update(await self._read_sources_file(self.args.sources_file))
 
         if not sources:
-            self._print_error("No source specifications found")
+            await self._print_error("No source specifications found")
             sys.exit(1)
 
         return sources
 
-    def _global_patterns(self):
+    async def _global_patterns(self):
         filters = list()
         if self.args.filters is not None:
             filters.extend(self.args.filters)
         if self.args.filters_file is not None:
-            filters.extend(self._read_filters_file(self.args.filters_file))
+            filters.extend(await self._read_filters_file(self.args.filters_file))
 
         global_patterns = list()
         for filter_string in filters:
@@ -498,7 +516,7 @@ class Application(object):
                 parser = TokenParser(tokens)
                 global_patterns.append(parser.buildFunc())
             except Exception as error:
-                self._print_error(
+                await self._print_error(
                     "Error while compiling regular expression '%s': %s"
                     % (filter_string, str(error))
                 )
@@ -506,10 +524,10 @@ class Application(object):
 
         return global_patterns
 
-    def update(self):
-        sources = self._sources()
+    async def update(self):
+        sources = await self._sources()
 
-        global_patterns = self._global_patterns()
+        global_patterns = await self._global_patterns()
 
         self.items = list()
 
@@ -522,7 +540,7 @@ class Application(object):
             else:
                 re_funcs = global_patterns
 
-            for item in self._get_stream_items(source):
+            async for item in self._get_stream_items(source):
                 if not item:
                     continue
 
@@ -548,11 +566,11 @@ class Application(object):
                             matched_texts.update(
                                 title_matches[1], text_matches[1], link_matches[1]
                             )
-                            self.add_item(item, matched_texts)
+                            await self.add_item(item, matched_texts)
                             break
                 else:
                     # No filter patterns specified; simply print all items
-                    self.add_item(item)
+                    await self.add_item(item)
 
         # Print latest news last
         self.items.sort(
@@ -560,9 +578,9 @@ class Application(object):
         )
 
         for item in self.items:
-            self._queue_item(item[0], item[1])
+            await self._queue_item(item[0], item[1])
 
-    def text_speed(self, interval_ave):
+    async def text_speed(self, interval_ave):
         if interval_ave == 0:
             return 0
         else:
@@ -571,7 +589,7 @@ class Application(object):
                 return base_type_speed * interval_ave
             return val
 
-    def run(self):
+    async def run(self):
         if not self.args.snapshot:
             print(
                 "%s (%s)"
@@ -582,8 +600,8 @@ class Application(object):
             )
 
         try:
-            self.update()
-            self.flush_queue(interval=0)
+            await self.update()
+            await self.flush_queue(interval=0)
 
             if self.args.snapshot:
                 return
@@ -591,10 +609,10 @@ class Application(object):
             if self.args.update_interval > 0:
                 while True:
                     print()
-                    time.sleep(self.args.update_interval)
+                    await asyncio.sleep(self.args.update_interval)
 
-                    self.update()
-                    self.flush_queue(interval=self.text_speed_ave)
+                    await self.update()
+                    await self.flush_queue(interval=self.text_speed_ave)
         except (KeyboardInterrupt, Quit):
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
@@ -665,7 +683,7 @@ def main():
             "either a source URL (-s) or a sources file (-S) must be given"
         )
 
-    Application(args).run()
+    asyncio.run(Application(args).run())
 
 
 if __name__ == "__main__":
