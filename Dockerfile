@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=python:3.12-slim
 
-FROM ${BASE_IMAGE} AS venv_builder
+FROM ${BASE_IMAGE} AS base-builder
 ENV POETRY_VENV=/poetry_venv
 ENV VIRTUAL_ENV=/venv
 RUN python3 -m venv $POETRY_VENV
@@ -17,6 +17,8 @@ RUN $POETRY_VENV/bin/pip install --upgrade pip poetry && \
         pip install --upgrade pip
 
 WORKDIR /app
+
+FROM base-builder AS venv_builder
 COPY poetry.lock pyproject.toml /app/
 
 RUN $POETRY_VENV/bin/poetry install --without dev

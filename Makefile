@@ -6,9 +6,9 @@ help: ## This help
 list: ## List all targets
 	@make -qp | awk -F':' '/^[a-zA-Z0-9][^$$#\/\t=]*:([^=]|$$)/ {split($$1,A,/ /);for(i in A)print A[i]}'
 
-shell: build-dev ## Open a shell
+shell: ## Open a shell
 	docker run --rm -it \
-	    -v $$(pwd)/krill:/app/krill \
+	    -v $$(pwd):/app \
 	    -v ~/.bash_history_krill:/root/.bash_history \
 	    -v $$(pwd)/pyproject.toml:/app/pyproject.toml \
 	    -v $$(pwd)/poetry.lock:/app/poetry.lock \
@@ -19,6 +19,9 @@ build: ## Build prod container
 
 build-dev: ## Build dev container
 	docker build --target=dev -t kyokley/krill-base .
+
+build-base: ## Build dev container
+	docker build --target=base-builder -t kyokley/krill-base .
 
 autoformat: ## autoformat source code with black
 	docker run --rm -v $$(pwd)/krill:/app/krill kyokley/krill-base /bin/bash -c "find . -name '*.py' | xargs isort && find . -name '*.py' | xargs black -S"
