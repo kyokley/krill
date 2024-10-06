@@ -251,7 +251,8 @@ class Application(object):
 
         for story_id in story_ids[:number_of_stories]:
             try:
-                resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id))
+                resp = requests.get(HN_STORY_URL_TEMPLATE.format(story_id),
+                                    timeout=REQUESTS_TIMEOUT)
             except Exception as e:
                 cls._print_error('Error getting HackerNews stories')
                 cls._print_error(str(e))
