@@ -18,15 +18,18 @@ import json
 import random
 import re
 import sys
+import warnings
 from collections import namedtuple
 from datetime import datetime
 
 import feedparser
 from blessings import Terminal
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
 from .lexer import filter_lex
 from .parser import TokenParser
+
+warnings.filterwarnings('ignore', category=MarkupResemblesLocatorWarning)
 
 rand = random.SystemRandom()
 
