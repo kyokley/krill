@@ -36,6 +36,7 @@ rand = random.SystemRandom()
 base_type_speed = 0.01
 
 REQUESTS_TIMEOUT = 5
+NUM_WORKERS = 3
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
@@ -210,6 +211,8 @@ class Application:
             self.text_speed_ave = speed
         self.items = list()
         self._queue = list()
+        self._stream_data = asyncio.Queue()
+        self._output_data = asyncio.Queue()
         self._links = dict()
 
     async def add_item(self, item, patterns=None):
@@ -228,7 +231,7 @@ class Application:
     @classmethod
     async def _hn_story_ids(cls, url, cb=None):
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
                 resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
             story_ids = resp.json()
         except Exception as e:
@@ -265,7 +268,7 @@ class Application:
 
         for story_id in story_ids[:number_of_stories]:
             try:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(follow_redirects=True) as client:
                     resp = await client.get(HN_STORY_URL_TEMPLATE.format(story_id),
                                             timeout=REQUESTS_TIMEOUT)
             except Exception as e:
@@ -286,11 +289,10 @@ class Application:
                     story.get('url', ''),
                 )
 
-    @classmethod
-    async def _get_stream_items(cls, url):
+    async def _get_stream_items(self, url):
         if 'hackernews' not in url.lower():
             try:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(follow_redirects=True) as client:
                     headers = {
                         'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
                     }
@@ -304,15 +306,46 @@ class Application:
                         yield stream_data
 
             except Exception as error:
-                await cls._print_error(
+                await self._print_error(
                     "Unable to retrieve data from URL '%s': %s" % (url, str(error))
                 )
                 # The problem might be temporary, so we do not exit
                 yield list()
 
         else:
-            async for stream_data in cls.hn_stories_generator():
+            async for stream_data in self.hn_stories_generator():
                 yield stream_data
+
+    async def source_worker(self, queue):
+        while True:
+            url, patterns = await queue.get()
+
+            if 'hackernews' not in url.lower():
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                        headers = {
+                            'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
+                        }
+                        data = (await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)).content
+
+                    if "//twitter.com/" in url:
+                        async for stream_data in StreamParser.get_tweets(data):
+                            self._stream_data.put_nowait((stream_data, patterns))
+                    else:
+                        async for stream_data in StreamParser.get_feed_items(data, url):
+                            self._stream_data.put_nowait((stream_data, patterns))
+
+                except Exception as error:
+                    await self._print_error(
+                        "Unable to retrieve data from URL '%s': %s" % (url, str(error))
+                    )
+                    # The problem might be temporary, so we do not exit
+
+            else:
+                async for stream_data in self.hn_stories_generator():
+                    self._stream_data.put_nowait((stream_data, patterns))
+
+            queue.task_done()
 
     @classmethod
     async def _read_sources_file(cls, filename):
@@ -527,14 +560,12 @@ class Application:
 
         return global_patterns
 
-    async def update(self):
-        sources = await self._sources()
-
+    async def _process_source(self, queue):
         global_patterns = await self._global_patterns()
+        while True:
+            source, source_patterns = await queue.get()
 
-        self.items = list()
-
-        for source, source_patterns in sources.items():
+            import pdb; pdb.set_trace()  # ############################## Breakpoint ##############################
             re_funcs = None
             if source_patterns:
                 tokens = filter_lex(source_patterns)
@@ -543,37 +574,63 @@ class Application:
             else:
                 re_funcs = global_patterns
 
-            async for item in self._get_stream_items(source):
-                if not item:
-                    continue
+            self._stream_data.put_nowait((source.link, source_patterns))
+            # coros = [self._stream_items(item, re_funcs)
+                    # async for item in self._get_stream_items(source.link)]
+            # await asyncio.gather(*coros)
 
-                if re_funcs:
-                    for re_func in re_funcs:
-                        title_matches = (
-                            item.title is not None
-                            and re_func(item.title)
-                            or (False, set())
-                        )
-                        text_matches = (
-                            item.text is not None
-                            and re_func(item.text)
-                            or (False, set())
-                        )
-                        link_matches = (
-                            item.link is not None
-                            and re_func(item.link)
-                            or (False, set())
-                        )
-                        if title_matches[0] or text_matches[0] or link_matches[0]:
-                            matched_texts = set()
-                            matched_texts.update(
-                                title_matches[1], text_matches[1], link_matches[1]
-                            )
-                            await self.add_item(item, matched_texts)
-                            break
-                else:
-                    # No filter patterns specified; simply print all items
-                    await self.add_item(item)
+            queue.task_done()
+
+    async def _stream_items(self, item, re_funcs):
+        if re_funcs:
+            for re_func in re_funcs:
+                title_matches = (
+                    item.title is not None
+                    and re_func(item.title)
+                    or (False, set())
+                )
+                text_matches = (
+                    item.text is not None
+                    and re_func(item.text)
+                    or (False, set())
+                )
+                link_matches = (
+                    item.link is not None
+                    and re_func(item.link)
+                    or (False, set())
+                )
+                if title_matches[0] or text_matches[0] or link_matches[0]:
+                    matched_texts = set()
+                    matched_texts.update(
+                        title_matches[1], text_matches[1], link_matches[1]
+                    )
+                    await self.add_item(item, matched_texts)
+                    break
+        else:
+            # No filter patterns specified; simply print all items
+            await self.add_item(item)
+
+    async def update(self):
+        source_queue = asyncio.Queue()
+        sources = await self._sources()
+
+        for source, source_patterns in sources.items():
+            source_queue.put_nowait((source, source_patterns))
+
+        self.items = list()
+
+        tasks = []
+        for _ in range(NUM_WORKERS):
+            task = asyncio.create_task(self.source_worker(source_queue))
+            tasks.append(task)
+
+            task = asyncio.create_task(self._process_source(self._stream_data))
+            tasks.append(task)
+
+        await source_queue.join()
+
+        for task in tasks:
+            task.cancel()
 
         # Print latest news last
         self.items.sort(
@@ -583,14 +640,9 @@ class Application:
         for item in self.items:
             await self._queue_item(item[0], item[1])
 
-    async def text_speed(self, interval_ave):
-        if interval_ave == 0:
-            return 0
-        else:
-            val = base_type_speed * (interval_ave + rand.normalvariate(0, 3.5))
-            if val <= 0:
-                return base_type_speed * interval_ave
-            return val
+        # Wait until all worker tasks are cancelled.
+        await asyncio.gather(*tasks, return_exceptions=True)
+
 
     async def run(self):
         if not self.args.snapshot:
