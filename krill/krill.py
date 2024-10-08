@@ -209,10 +209,14 @@ class Application:
             if speed < 0 or speed > 10:
                 raise ValueError('Speed is invalid. Got %s' % speed)
             self.text_speed_ave = speed
+
+        self.clear()
+
+    def clear(self):
         self.items = list()
-        self._queue = list()
+        self._queue = asyncio.Queue()
         self._items_queue = asyncio.Queue()
-        self._output_data = asyncio.Queue()
+        self._output_queue = asyncio.Queue()
         self._links = dict()
 
     async def add_item(self, item, patterns=None):
@@ -221,7 +225,16 @@ class Application:
             # Do not print an item more than once
             return
         self._known_items.add(item_id)
-        self.items.append((item, patterns))
+        self._output_queue.put_nowait((item, patterns))
+
+    def text_speed(self, interval_ave):
+        if interval_ave == 0:
+            return 0
+        else:
+            val = base_type_speed * (interval_ave + rand.normalvariate(0, 3.5))
+            if val <= 0:
+                return base_type_speed * interval_ave
+            return val
 
     @staticmethod
     async def _print_error(error):
@@ -380,7 +393,7 @@ class Application:
         self.item_count += 1
 
         if not self.args.snapshot:
-            self._queue.append("")
+            self._queue.put_nowait("")
         else:
             snapshot_item = dict()
 
@@ -395,7 +408,7 @@ class Application:
         )
 
         if not self.args.snapshot:
-            self._queue.append(
+            self._queue.put_nowait(
                 "%s. %s%s:" % (self.item_count, TERMINAL.cyan(item.source), time_label)
             )
 
@@ -403,7 +416,7 @@ class Application:
 
         if item.title is not None:
             if not self.args.snapshot:
-                self._queue.append(
+                self._queue.put_nowait(
                     "%s%s"
                     % (
                         indent,
@@ -441,7 +454,7 @@ class Application:
                 excerpt, patterns, TERMINAL.black_on_yellow
             )
 
-            self._queue.append(
+            self._queue.put_nowait(
                 "%s%s%s%s"
                 % (
                     indent,
@@ -454,7 +467,7 @@ class Application:
         if item.link is not None:
             self._links[self.item_count] = item.link
             if not self.args.snapshot:
-                self._queue.append(
+                self._queue.put_nowait(
                     "%s%s"
                     % (
                         indent,
@@ -470,14 +483,16 @@ class Application:
                 snapshot_item['link'] = item.link
 
         if self.args.snapshot:
-            self._queue.append(snapshot_item)
+            self._queue.put_nowait(snapshot_item)
 
-    async def flush_queue(self, interval=0.1):
-        if not self.args.snapshot:
-            for text in self._queue:
+    async def flush_worker(self, queue):
+        while True:
+            text = await queue.get()
+
+            if not self.args.snapshot:
                 idx = 0
                 while idx < len(text):
-                    await asyncio.sleep(await self.text_speed(interval))
+                    await asyncio.sleep(self.text_speed(.1))
                     match = re.search(_invisible_codes, text[idx:])
                     if match:
                         end = idx + match.span()[1]
@@ -489,9 +504,8 @@ class Application:
                     sys.stdout.flush()
                 sys.stdout.write('\n')
                 sys.stdout.flush()
-            self._queue = list()
-        else:
-            print(json.dumps([x for x in self._queue if x.get('title')]))
+            else:
+                print(text)
 
     async def _sources(self):
         # Reload sources and filters to allow for live editing
@@ -568,7 +582,15 @@ class Application:
 
             queue.task_done()
 
+    async def output_worker(self, queue):
+        while True:
+            item = await queue.get()
+            await self._queue_item(item[0], item[1])
+            queue.task_done()
+
     async def update(self):
+        self.clear()
+
         source_queue = asyncio.Queue()
         sources = await self._sources()
 
@@ -585,19 +607,15 @@ class Application:
             task = asyncio.create_task(self.stream_worker(self._items_queue))
             tasks.append(task)
 
+            task = asyncio.create_task(self.output_worker(self._output_queue))
+            tasks.append(task)
+
+        task = asyncio.create_task(self.flush_worker(self._queue))
 
         await source_queue.join()
 
         for task in tasks:
             task.cancel()
-
-        # Print latest news last
-        self.items.sort(
-            key=lambda item: datetime.now() if item[0].time is None else item[0].time
-        )
-
-        for item in self.items:
-            await self._queue_item(item[0], item[1])
 
         # Wait until all worker tasks are cancelled.
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -615,7 +633,6 @@ class Application:
 
         try:
             await self.update()
-            await self.flush_queue(interval=0)
 
             if self.args.snapshot:
                 return
@@ -626,7 +643,6 @@ class Application:
                     await asyncio.sleep(self.args.update_interval)
 
                     await self.update()
-                    await self.flush_queue(interval=self.text_speed_ave)
         except (KeyboardInterrupt, Quit):
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
