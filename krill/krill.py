@@ -485,14 +485,14 @@ class Application:
         if self.args.snapshot:
             self._queue.put_nowait(snapshot_item)
 
-    async def flush_worker(self, queue):
+    async def flush_worker(self, queue, interval=.1):
         while True:
             text = await queue.get()
 
             if not self.args.snapshot:
                 idx = 0
                 while idx < len(text):
-                    await asyncio.sleep(self.text_speed(.1))
+                    await asyncio.sleep(self.text_speed(interval))
                     match = re.search(_invisible_codes, text[idx:])
                     if match:
                         end = idx + match.span()[1]
@@ -610,9 +610,12 @@ class Application:
             task = asyncio.create_task(self.output_worker(self._output_queue))
             tasks.append(task)
 
-        task = asyncio.create_task(self.flush_worker(self._queue))
+        task = asyncio.create_task(self.flush_worker(self._queue, self.text_speed_ave))
 
         await source_queue.join()
+        await self._items_queue.join()
+        await self._output_queue.join()
+        await self._queue.join()
 
         for task in tasks:
             task.cancel()
@@ -643,7 +646,7 @@ class Application:
                     await asyncio.sleep(self.args.update_interval)
 
                     await self.update()
-        except (KeyboardInterrupt, Quit):
+        except (KeyboardInterrupt, Quit, asyncio.exceptions.CancelledError):
             # Do not print stacktrace if user exits with Ctrl+C
             sys.exit()
 
