@@ -211,7 +211,7 @@ class Application:
             self.text_speed_ave = speed
         self.items = list()
         self._queue = list()
-        self._stream_data = asyncio.Queue()
+        self._items_queue = asyncio.Queue()
         self._output_data = asyncio.Queue()
         self._links = dict()
 
@@ -289,32 +289,6 @@ class Application:
                     story.get('url', ''),
                 )
 
-    async def _get_stream_items(self, url):
-        if 'hackernews' not in url.lower():
-            try:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
-                    headers = {
-                        'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
-                    }
-                    data = (await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)).content
-
-                if "//twitter.com/" in url:
-                    async for stream_data in StreamParser.get_tweets(data):
-                        yield stream_data
-                else:
-                    async for stream_data in StreamParser.get_feed_items(data, url):
-                        yield stream_data
-
-            except Exception as error:
-                await self._print_error(
-                    "Unable to retrieve data from URL '%s': %s" % (url, str(error))
-                )
-                # The problem might be temporary, so we do not exit
-                yield list()
-
-        else:
-            async for stream_data in self.hn_stories_generator():
-                yield stream_data
 
     async def source_worker(self, queue):
         while True:
@@ -330,10 +304,10 @@ class Application:
 
                     if "//twitter.com/" in url:
                         async for stream_data in StreamParser.get_tweets(data):
-                            self._stream_data.put_nowait((stream_data, patterns))
+                            self._items_queue.put_nowait((stream_data, patterns))
                     else:
                         async for stream_data in StreamParser.get_feed_items(data, url):
-                            self._stream_data.put_nowait((stream_data, patterns))
+                            self._items_queue.put_nowait((stream_data, patterns))
 
                 except Exception as error:
                     await self._print_error(
@@ -343,7 +317,7 @@ class Application:
 
             else:
                 async for stream_data in self.hn_stories_generator():
-                    self._stream_data.put_nowait((stream_data, patterns))
+                    self._items_queue.put_nowait((stream_data, patterns))
 
             queue.task_done()
 
@@ -560,55 +534,39 @@ class Application:
 
         return global_patterns
 
-    async def _process_source(self, queue):
-        global_patterns = await self._global_patterns()
+    async def stream_worker(self, queue):
         while True:
-            source, source_patterns = await queue.get()
+            item, re_funcs = await queue.get()
 
-            import pdb; pdb.set_trace()  # ############################## Breakpoint ##############################
-            re_funcs = None
-            if source_patterns:
-                tokens = filter_lex(source_patterns)
-                parser = TokenParser(tokens)
-                re_funcs = [parser.buildFunc()]
+            if re_funcs:
+                for re_func in re_funcs:
+                    title_matches = (
+                        item.title is not None
+                        and re_func(item.title)
+                        or (False, set())
+                    )
+                    text_matches = (
+                        item.text is not None
+                        and re_func(item.text)
+                        or (False, set())
+                    )
+                    link_matches = (
+                        item.link is not None
+                        and re_func(item.link)
+                        or (False, set())
+                    )
+                    if title_matches[0] or text_matches[0] or link_matches[0]:
+                        matched_texts = set()
+                        matched_texts.update(
+                            title_matches[1], text_matches[1], link_matches[1]
+                        )
+                        await self.add_item(item, matched_texts)
+                        break
             else:
-                re_funcs = global_patterns
-
-            self._stream_data.put_nowait((source.link, source_patterns))
-            # coros = [self._stream_items(item, re_funcs)
-                    # async for item in self._get_stream_items(source.link)]
-            # await asyncio.gather(*coros)
+                # No filter patterns specified; simply print all items
+                await self.add_item(item)
 
             queue.task_done()
-
-    async def _stream_items(self, item, re_funcs):
-        if re_funcs:
-            for re_func in re_funcs:
-                title_matches = (
-                    item.title is not None
-                    and re_func(item.title)
-                    or (False, set())
-                )
-                text_matches = (
-                    item.text is not None
-                    and re_func(item.text)
-                    or (False, set())
-                )
-                link_matches = (
-                    item.link is not None
-                    and re_func(item.link)
-                    or (False, set())
-                )
-                if title_matches[0] or text_matches[0] or link_matches[0]:
-                    matched_texts = set()
-                    matched_texts.update(
-                        title_matches[1], text_matches[1], link_matches[1]
-                    )
-                    await self.add_item(item, matched_texts)
-                    break
-        else:
-            # No filter patterns specified; simply print all items
-            await self.add_item(item)
 
     async def update(self):
         source_queue = asyncio.Queue()
@@ -624,8 +582,9 @@ class Application:
             task = asyncio.create_task(self.source_worker(source_queue))
             tasks.append(task)
 
-            task = asyncio.create_task(self._process_source(self._stream_data))
+            task = asyncio.create_task(self.stream_worker(self._items_queue))
             tasks.append(task)
+
 
         await source_queue.join()
 
