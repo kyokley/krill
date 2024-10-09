@@ -42,12 +42,11 @@ WORKDIR /app
 
 COPY --from=venv_builder $POETRY_VENV $POETRY_VENV
 COPY --from=venv_builder $VIRTUAL_ENV $VIRTUAL_ENV
+COPY . /app
 
 FROM base AS prod
-COPY . /app
 RUN poetry install --without dev
 CMD ["krill", "-u", "30", "-S", "/app/test_sources.txt"]
 
 FROM base AS dev
-COPY poetry.lock pyproject.toml /app/
 RUN poetry install

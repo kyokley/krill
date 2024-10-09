@@ -212,6 +212,9 @@ class Application:
 
         self.clear()
 
+    async def populate_sources(self):
+        self.sources = await self._sources()
+
     def clear(self):
         self.items = list()
         self._queue = asyncio.Queue()
@@ -301,38 +304,6 @@ class Application:
                     story.get('text', '').replace('<p>', '\n'),
                     story.get('url', ''),
                 )
-
-
-    async def source_worker(self, queue):
-        while True:
-            url, patterns = await queue.get()
-
-            if 'hackernews' not in url.lower():
-                try:
-                    async with httpx.AsyncClient(follow_redirects=True) as client:
-                        headers = {
-                            'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
-                        }
-                        data = (await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)).content
-
-                    if "//twitter.com/" in url:
-                        async for stream_data in StreamParser.get_tweets(data):
-                            self._items_queue.put_nowait((stream_data, patterns))
-                    else:
-                        async for stream_data in StreamParser.get_feed_items(data, url):
-                            self._items_queue.put_nowait((stream_data, patterns))
-
-                except Exception as error:
-                    await self._print_error(
-                        "Unable to retrieve data from URL '%s': %s" % (url, str(error))
-                    )
-                    # The problem might be temporary, so we do not exit
-
-            else:
-                async for stream_data in self.hn_stories_generator():
-                    self._items_queue.put_nowait((stream_data, patterns))
-
-            queue.task_done()
 
     @classmethod
     async def _read_sources_file(cls, filename):
@@ -485,6 +456,77 @@ class Application:
         if self.args.snapshot:
             self._queue.put_nowait(snapshot_item)
 
+    async def source_worker(self, queue):
+        while True:
+            url, patterns = await queue.get()
+
+            if 'hackernews' not in url.lower():
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                        headers = {
+                            'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
+                        }
+                        data = (await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)).content
+
+                    if "//twitter.com/" in url:
+                        async for stream_data in StreamParser.get_tweets(data):
+                            self._items_queue.put_nowait((stream_data, patterns))
+                    else:
+                        async for stream_data in StreamParser.get_feed_items(data, url):
+                            self._items_queue.put_nowait((stream_data, patterns))
+
+                except Exception as error:
+                    await self._print_error(
+                        "Unable to retrieve data from URL '%s': %s" % (url, str(error))
+                    )
+                    # The problem might be temporary, so we do not exit
+
+            else:
+                async for stream_data in self.hn_stories_generator():
+                    self._items_queue.put_nowait((stream_data, patterns))
+
+            queue.task_done()
+
+    async def stream_worker(self, queue):
+        while True:
+            item, re_funcs = await queue.get()
+
+            if re_funcs:
+                for re_func in re_funcs:
+                    title_matches = (
+                        item.title is not None
+                        and re_func(item.title)
+                        or (False, set())
+                    )
+                    text_matches = (
+                        item.text is not None
+                        and re_func(item.text)
+                        or (False, set())
+                    )
+                    link_matches = (
+                        item.link is not None
+                        and re_func(item.link)
+                        or (False, set())
+                    )
+                    if title_matches[0] or text_matches[0] or link_matches[0]:
+                        matched_texts = set()
+                        matched_texts.update(
+                            title_matches[1], text_matches[1], link_matches[1]
+                        )
+                        await self.add_item(item, matched_texts)
+                        break
+            else:
+                # No filter patterns specified; simply print all items
+                await self.add_item(item)
+
+            queue.task_done()
+
+    async def output_worker(self, queue):
+        while True:
+            item = await queue.get()
+            await self._queue_item(item[0], item[1])
+            queue.task_done()
+
     async def flush_worker(self, queue, interval=.1):
         while True:
             text = await queue.get()
@@ -506,6 +548,8 @@ class Application:
                 sys.stdout.flush()
             else:
                 print(text)
+
+            queue.task_done()
 
     async def _sources(self):
         # Reload sources and filters to allow for live editing
@@ -548,61 +592,21 @@ class Application:
 
         return global_patterns
 
-    async def stream_worker(self, queue):
-        while True:
-            item, re_funcs = await queue.get()
-
-            if re_funcs:
-                for re_func in re_funcs:
-                    title_matches = (
-                        item.title is not None
-                        and re_func(item.title)
-                        or (False, set())
-                    )
-                    text_matches = (
-                        item.text is not None
-                        and re_func(item.text)
-                        or (False, set())
-                    )
-                    link_matches = (
-                        item.link is not None
-                        and re_func(item.link)
-                        or (False, set())
-                    )
-                    if title_matches[0] or text_matches[0] or link_matches[0]:
-                        matched_texts = set()
-                        matched_texts.update(
-                            title_matches[1], text_matches[1], link_matches[1]
-                        )
-                        await self.add_item(item, matched_texts)
-                        break
-            else:
-                # No filter patterns specified; simply print all items
-                await self.add_item(item)
-
-            queue.task_done()
-
-    async def output_worker(self, queue):
-        while True:
-            item = await queue.get()
-            await self._queue_item(item[0], item[1])
-            queue.task_done()
-
     async def update(self):
         self.clear()
 
         source_queue = asyncio.Queue()
-        sources = await self._sources()
 
-        for source, source_patterns in sources.items():
+        for source, source_patterns in self.sources.items():
             source_queue.put_nowait((source, source_patterns))
 
         self.items = list()
 
         tasks = []
         for _ in range(NUM_WORKERS):
-            task = asyncio.create_task(self.source_worker(source_queue))
-            tasks.append(task)
+            for x in range(2):
+                task = asyncio.create_task(self.source_worker(source_queue))
+                tasks.append(task)
 
             task = asyncio.create_task(self.stream_worker(self._items_queue))
             tasks.append(task)
@@ -611,6 +615,7 @@ class Application:
             tasks.append(task)
 
         task = asyncio.create_task(self.flush_worker(self._queue, self.text_speed_ave))
+        tasks.append(task)
 
         await source_queue.join()
         await self._items_queue.join()
@@ -625,6 +630,8 @@ class Application:
 
 
     async def run(self):
+        await self.populate_sources()
+
         if not self.args.snapshot:
             print(
                 "%s (%s)"
@@ -716,7 +723,9 @@ def main():
             "either a source URL (-s) or a sources file (-S) must be given"
         )
 
-    asyncio.run(Application(args).run())
+    asyncio.run(
+            Application(args).run()
+            )
 
 
 if __name__ == "__main__":
