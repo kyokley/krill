@@ -213,7 +213,18 @@ class Application:
         self.clear()
 
     async def populate_sources(self):
-        self.sources = await self._sources()
+        self.sources = []
+        global_patterns = await self._global_patterns()
+        for source, source_patterns in (await self._sources()).items():
+            re_funcs = []
+            if source_patterns:
+                tokens = filter_lex(source_patterns)
+                parser = TokenParser(tokens)
+                re_funcs = [parser.buildFunc()]
+            else:
+                re_funcs = global_patterns
+            self.sources.append((source, re_funcs))
+
 
     def clear(self):
         self.items = list()
@@ -597,7 +608,7 @@ class Application:
 
         source_queue = asyncio.Queue()
 
-        for source, source_patterns in self.sources.items():
+        for source, source_patterns in self.sources:
             source_queue.put_nowait((source, source_patterns))
 
         self.items = list()
@@ -636,13 +647,18 @@ class Application:
             print(
                 "%s (%s)"
                 % (
-                    TERMINAL.bold("krill++ 0.4.1"),
+                    TERMINAL.bold("krill++ 0.5.0"),
                     TERMINAL.underline("https://github.com/kyokley/krill"),
                 )
             )
 
         try:
+            original_text_speed = self.text_speed_ave
+            self.text_speed_ave = 0
+
             await self.update()
+
+            self.text_speed_ave = original_text_speed
 
             if self.args.snapshot:
                 return
