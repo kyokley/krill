@@ -1,10 +1,14 @@
 import pytest
+import asyncio
 
 from unittest import mock
 from krill.krill import Application, fix_html
 import builtins
 
+pytest_plugins = ('pytest_asyncio',)
 
+
+@pytest.mark.asyncio
 class TestFixLinks:
     async def test_fix_http(self):
         test_str = 'This is a link.http://twitter.com'
@@ -54,6 +58,7 @@ class TestFixLinks:
         assert expected == actual
 
 
+@pytest.mark.asyncio
 class TestReadSourceFile:
     @pytest.fixture(autouse=True)
     async def setUp(self):
