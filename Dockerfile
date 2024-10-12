@@ -42,6 +42,9 @@ WORKDIR /app
 
 COPY --from=venv_builder $POETRY_VENV $POETRY_VENV
 COPY --from=venv_builder $VIRTUAL_ENV $VIRTUAL_ENV
+
+COPY poetry.lock pyproject.toml /app/
+RUN poetry install --no-root
 COPY . /app
 
 FROM base AS prod
