@@ -646,7 +646,7 @@ class Application:
             print(
                 "%s (%s)"
                 % (
-                    TERMINAL.bold("krill++ 0.5.0"),
+                    TERMINAL.bold("krill 0.5.0"),
                     TERMINAL.underline("https://github.com/kyokley/krill"),
                 )
             )
@@ -685,7 +685,7 @@ def main():
         sys.stdout = codecs.getwriter("utf-8")(prev_stdout)
 
     arg_parser = argparse.ArgumentParser(
-        prog="krill++", description="Read and filter web feeds."
+        prog="krill", description="Read and filter web feeds."
     )
     arg_parser.add_argument(
         "-s", "--sources", nargs="+", help="URLs to pull data from", metavar="URL"

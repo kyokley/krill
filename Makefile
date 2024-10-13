@@ -33,7 +33,7 @@ touch-history:
 publish: build ## Build and push docker image to dockerhub
 	docker push kyokley/krill-base
 
-run: build ## Run krill++
+run: build ## Run krill
 	docker run --rm -it -v $$(pwd)/krill:/app/krill kyokley/krill-base
 
 tests: build-dev ## Run test cases
