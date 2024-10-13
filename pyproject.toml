@@ -16,7 +16,6 @@ beautifulsoup4 = "^4.8"
 feedparser = "^6.0"
 blessings = "^1.7"
 cryptography = "^41.0"
-unsync = "^1.4.0"
 httpx = "^0.27.2"
 
 [tool.poetry.scripts]

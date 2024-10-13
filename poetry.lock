@@ -1059,16 +1059,6 @@ files = [
 ]
 
 [[package]]
-name = "unsync"
-version = "1.4.0"
-description = "Unsynchronize asyncio"
-optional = false
-python-versions = "*"
-files = [
-    {file = "unsync-1.4.0.tar.gz", hash = "sha256:a29e0f8952ffb0b3a0453ce436819a5a1ba2febbb5caa707c319f6f98d35f3c5"},
-]
-
-[[package]]
 name = "urllib3"
 version = "2.2.3"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
@@ -1116,4 +1106,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "2375fc65f9399408bd5ebdb7d13dd773a55d90370e8518b77295524436ae4f47"
+content-hash = "b6ca5d3ddcdb7e748a382045d820196662387bc1a5721876540e622d4aad4ab2"
