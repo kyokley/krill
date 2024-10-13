@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 
 from unittest import mock
 from krill.krill import Application, fix_html
