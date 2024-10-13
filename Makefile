@@ -12,7 +12,8 @@ shell: ## Open a shell
 	    -v ~/.bash_history_krill:/root/.bash_history \
 	    -v $$(pwd)/pyproject.toml:/app/pyproject.toml \
 	    -v $$(pwd)/poetry.lock:/app/poetry.lock \
-	    kyokley/krill-base /bin/bash
+	    --entrypoint /bin/bash \
+	    kyokley/krill-base
 
 build: ## Build prod container
 	docker build --target=prod -t kyokley/krill-base .
