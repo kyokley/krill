@@ -1,6 +1,6 @@
-ARG BASE_IMAGE=python:3.11-slim
+ARG BASE_IMAGE=python:3.12-slim
 
-FROM ${BASE_IMAGE} AS venv_builder
+FROM ${BASE_IMAGE} AS base-builder
 ENV POETRY_VENV=/poetry_venv
 ENV VIRTUAL_ENV=/venv
 RUN python3 -m venv $POETRY_VENV
@@ -9,12 +9,16 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH:$POETRY_VENV/bin"
 
 RUN apt-get update && apt-get install -y \
         curl \
+        libffi-dev \
+        g++ \
         git
 
 RUN $POETRY_VENV/bin/pip install --upgrade pip poetry && \
         pip install --upgrade pip
 
 WORKDIR /app
+
+FROM base-builder AS venv_builder
 COPY poetry.lock pyproject.toml /app/
 
 RUN $POETRY_VENV/bin/poetry install --without dev
@@ -39,14 +43,13 @@ WORKDIR /app
 COPY --from=venv_builder $POETRY_VENV $POETRY_VENV
 COPY --from=venv_builder $VIRTUAL_ENV $VIRTUAL_ENV
 
-FROM base AS prod
+COPY poetry.lock pyproject.toml /app/
+RUN poetry install --no-root
 COPY . /app
-RUN python setup.py install
-CMD ["krill++", "-u", "30", "-S", "/app/test_sources.txt"]
+
+FROM base AS prod
+RUN poetry install --without dev
+CMD ["krill", "-u", "30", "-S", "/app/test_sources.txt"]
 
 FROM base AS dev
-COPY poetry.lock pyproject.toml /app/
 RUN poetry install
-
-COPY . /app
-RUN python setup.py develop
