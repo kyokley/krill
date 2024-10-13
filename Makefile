@@ -12,7 +12,8 @@ shell: ## Open a shell
 	    -v ~/.bash_history_krill:/root/.bash_history \
 	    -v $$(pwd)/pyproject.toml:/app/pyproject.toml \
 	    -v $$(pwd)/poetry.lock:/app/poetry.lock \
-	    kyokley/krill-base /bin/bash
+	    --entrypoint /bin/bash \
+	    kyokley/krill-base
 
 build: ## Build prod container
 	docker build --target=prod -t kyokley/krill-base .
@@ -36,4 +37,4 @@ run: build ## Run krill++
 	docker run --rm -it -v $$(pwd)/krill:/app/krill kyokley/krill-base
 
 tests: build-dev ## Run test cases
-	docker run --rm -t -v $$(pwd)/krill:/app/krill kyokley/krill-base /bin/bash -c "pytest"
+	docker run --rm -t -v $$(pwd)/krill:/app/krill --entrypoint /bin/bash kyokley/krill-base -c "pytest"
