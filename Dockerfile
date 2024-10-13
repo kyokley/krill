@@ -49,7 +49,7 @@ COPY . /app
 
 FROM base AS prod
 RUN poetry install --without dev
-CMD ["krill", "-u", "30", "-S", "/app/test_sources.txt"]
+ENTRYPOINT ["krill", "-u", "30", "-S", "/app/test_sources.txt"]
 
 FROM base AS dev
 RUN poetry install
