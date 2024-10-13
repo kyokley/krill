@@ -61,7 +61,7 @@ class TestFixLinks:
 @pytest.mark.asyncio
 class TestReadSourceFile:
     @pytest.fixture(autouse=True)
-    async def setUp(self):
+    def setUp(self):
         self.mock_readlines_sources = [
             'https://twitter.com/hashtag/programming python',
             'http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml bailout',
@@ -82,7 +82,7 @@ class TestReadSourceFile:
     async def test_read_filters_file(self, mock_open):
         self.mock_myfile.readlines.return_value = self.mock_readlines_filters
         mock_open.return_value.__enter__.return_value = self.mock_myfile
-        actual = self.application._read_filters_file('test')
+        actual = await self.application._read_filters_file('test')
         expected = ['python', 'programming', 'esm bailout', 'new horizons']
         assert expected == actual
 
@@ -90,7 +90,7 @@ class TestReadSourceFile:
     async def test_read_source_file(self, mock_open):
         self.mock_myfile.readlines.return_value = self.mock_readlines_sources
         mock_open.return_value.__enter__.return_value = self.mock_myfile
-        actual = self.application._read_sources_file('filename')
+        actual = await self.application._read_sources_file('filename')
         expected = {
             'https://twitter.com/hashtag/programming': 'python',
             'http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml': 'bailout',

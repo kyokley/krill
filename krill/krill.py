@@ -14,7 +14,6 @@ import httpx
 import argparse
 import calendar
 import codecs
-import json
 import random
 import re
 import sys
