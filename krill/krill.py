@@ -664,7 +664,6 @@ class Application:
 
             if self.args.update_interval > 0:
                 while True:
-                    print()
                     await asyncio.sleep(self.args.update_interval)
 
                     await self.update()
