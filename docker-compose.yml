@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
     image: kyokley/krill-base
-    command: krill++ -u 30 -S /app/test_sources.txt
+    command: krill -u 30 -S /app/test_sources.txt
     volumes:
       - .:/app
       - ~/.bash_history_krill:/root/.bash_history
