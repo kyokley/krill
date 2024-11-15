@@ -18,6 +18,7 @@ import random
 import re
 import sys
 import warnings
+import json
 from collections import namedtuple
 from datetime import datetime
 
@@ -557,7 +558,7 @@ class Application:
                 sys.stdout.write('\n')
                 sys.stdout.flush()
             else:
-                print(text)
+                print(json.dumps(text))
 
             queue.task_done()
 
