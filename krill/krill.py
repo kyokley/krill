@@ -35,7 +35,7 @@ rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 5
+REQUESTS_TIMEOUT = 30
 NUM_WORKERS = 3
 
 _invisible_codes = re.compile(
@@ -252,8 +252,7 @@ class Application:
 
     @staticmethod
     async def _print_error(error):
-        print()
-        print(TERMINAL.red(error))
+        print(TERMINAL.red(error), file=sys.stderr)
 
     @classmethod
     async def _hn_story_ids(cls, url, cb=None):
@@ -488,7 +487,7 @@ class Application:
 
                 except Exception as error:
                     await self._print_error(
-                        "Unable to retrieve data from URL '%s': %s" % (url, str(error))
+                        f"Unable to retrieve data from URL '{url}': {error}"
                     )
                     # The problem might be temporary, so we do not exit
 
