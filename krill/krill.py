@@ -30,7 +30,7 @@ from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from .lexer import filter_lex
 from .parser import TokenParser
 
-PROXY = os.environ.get('KRILL_PROXY')
+PROXY = os.environ.get('KRILL_PROXY') or None
 
 warnings.filterwarnings('ignore', category=MarkupResemblesLocatorWarning)
 
