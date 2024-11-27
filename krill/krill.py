@@ -9,6 +9,7 @@
 # (https://gnu.org/licenses/gpl.html)
 from __future__ import unicode_literals
 
+import os
 import asyncio
 import httpx
 import argparse
@@ -28,6 +29,8 @@ from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
 from .lexer import filter_lex
 from .parser import TokenParser
+
+PROXY = os.environ.get('KRILL_PROXY')
 
 warnings.filterwarnings('ignore', category=MarkupResemblesLocatorWarning)
 
@@ -257,7 +260,7 @@ class Application:
     @classmethod
     async def _hn_story_ids(cls, url, cb=None):
         try:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
+            async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
                 resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
             story_ids = resp.json()
         except Exception as e:
@@ -294,7 +297,7 @@ class Application:
 
         for story_id in story_ids[:number_of_stories]:
             try:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
+                async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
                     resp = await client.get(HN_STORY_URL_TEMPLATE.format(story_id),
                                             timeout=REQUESTS_TIMEOUT)
             except Exception as e:
@@ -472,7 +475,7 @@ class Application:
 
             if 'hackernews' not in url.lower():
                 try:
-                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                    async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
                         headers = {
                             'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
                         }
