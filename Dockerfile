@@ -40,6 +40,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+RUN groupadd -r user && \
+        useradd -r -g user user && \
+        chown -R user:user /app
+
 COPY --from=venv_builder $POETRY_VENV $POETRY_VENV
 COPY --from=venv_builder $VIRTUAL_ENV $VIRTUAL_ENV
 
@@ -49,9 +53,13 @@ COPY . /app
 
 FROM base AS prod
 RUN poetry install --without dev
+USER user
 ENTRYPOINT ["krill"]
 CMD ["-u", "30", "-S", "/app/test_sources.txt"]
 
-FROM base AS dev
+FROM base AS dev-root
 RUN poetry install
 ENTRYPOINT ["krill"]
+
+FROM dev-root AS dev
+USER user
