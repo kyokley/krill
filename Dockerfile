@@ -1,65 +1,50 @@
 ARG BASE_IMAGE=python:3.12-slim
 
-FROM ${BASE_IMAGE} AS base-builder
-ENV POETRY_VENV=/poetry_venv
-ENV VIRTUAL_ENV=/venv
-RUN python3 -m venv $POETRY_VENV
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH:$POETRY_VENV/bin"
+FROM ${BASE_IMAGE} AS base
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=.
+ENV UV_FROZEN=true
+ENV UV_PROJECT_ENVIRONMENT=/venv
+ENV UV_CACHE_DIR=/uv_cache
+ENV APP_DIR=/app
+
+RUN groupadd -r user && \
+        useradd -r -g user user
 
 RUN apt-get update && apt-get install -y \
         curl \
         libffi-dev \
         g++ \
-        git
+        git && \
+        pip install --upgrade pip uv
 
-RUN $POETRY_VENV/bin/pip install --upgrade pip poetry && \
-        pip install --upgrade pip
+RUN pip install --upgrade pip uv
 
-WORKDIR /app
+WORKDIR ${UV_PROJECT_ENVIRONMENT}
+WORKDIR ${UV_CACHE_DIR}
+WORKDIR ${APP_DIR}
 
-FROM base-builder AS venv_builder
-COPY poetry.lock pyproject.toml /app/
+RUN chown -R user:user ${APP_DIR} ${UV_CACHE_DIR} ${UV_PROJECT_ENVIRONMENT}
 
-RUN $POETRY_VENV/bin/poetry install --without dev
+COPY pyproject.toml uv.lock ${APP_DIR}/
 
-FROM ${BASE_IMAGE} AS base
+USER user
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+RUN uv venv --seed && \
+        uv sync --no-dev --no-install-project
 
-ENV POETRY_VENV=/poetry_venv
-ENV VIRTUAL_ENV=/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH:$POETRY_VENV/bin"
-
-RUN apt-get update && apt-get install -y \
-        git \
-        gcc \
-        ca-certificates \
-        curl
-
-WORKDIR /app
-
-RUN groupadd -r user && \
-        useradd -r -g user user && \
-        chown -R user:user /app
-
-COPY --from=venv_builder $POETRY_VENV $POETRY_VENV
-COPY --from=venv_builder $VIRTUAL_ENV $VIRTUAL_ENV
-
-COPY poetry.lock pyproject.toml /app/
-RUN poetry install --no-root
 COPY . /app
 
-FROM base AS prod
-RUN poetry install --without dev
-USER user
-ENTRYPOINT ["krill"]
+ENTRYPOINT ["uv", "run", "--no-dev", "krill"]
 CMD ["-u", "30", "-S", "/app/test_sources.txt"]
 
+FROM base AS prod
+RUN uv sync --no-dev
+
 FROM base AS dev-root
-RUN poetry install
-ENTRYPOINT ["krill"]
+RUN uv sync
+USER root
 
 FROM dev-root AS dev
 USER user

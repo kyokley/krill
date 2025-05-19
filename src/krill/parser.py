@@ -1,7 +1,7 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 import re
 
-from .lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
+from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
 
 
 class Expr(object):
