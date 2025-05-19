@@ -51,4 +51,4 @@ run: build ## Run krill
 	docker run --rm -it -v $$(pwd)/krill:/app/krill kyokley/krill-base
 
 tests: build-dev ## Run test cases
-	docker run --rm -t -v $$(pwd)/krill:/app/krill --entrypoint /bin/bash kyokley/krill-base -c "pytest"
+	docker run --rm -t -v $$(pwd)/krill:/app/krill --entrypoint uv kyokley/krill-base run -n pytest

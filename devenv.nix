@@ -2,7 +2,10 @@
 
 {
   # https://devenv.sh/basics/
-  env.GREET = "Krill";
+  env = {
+    GREET = "Krill";
+    USE_HOST_NET = 1;
+  };
 
   # https://devenv.sh/packages/
   packages = [];
