@@ -7,10 +7,15 @@ from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
 
 class Expr:
     def build(self):
-        return (False, set())
+        return build_expr(self)
 
     def __str__(self):
         return print_expr(self)
+
+
+@singledispatch
+def build_expr(expr):
+    raise NotImplementedError
 
 
 @singledispatch
@@ -31,17 +36,18 @@ class FilterExpr(Expr):
     def __init__(self, token):
         self.filter = token[0].strip()
 
-    def build(self):
-        regex = re.compile(self.filter, re.IGNORECASE)
+@build_expr.register(FilterExpr)
+def _(expr):
+    regex = re.compile(expr.filter, re.IGNORECASE)
 
-        def func(text):
-            match = regex.search(text)
-            if match:
-                return (True, set([regex]))
-            else:
-                return (False, set())
+    def func(text):
+        match = regex.search(text)
+        if match:
+            return (True, set([regex]))
+        else:
+            return (False, set())
 
-        return func
+    return func
 
 
 @print_expr.register(FilterExpr)
@@ -61,58 +67,65 @@ def _(expr):
 
 
 class AndExpr(BinaryExpr):
-    def build(self):
-        def func(text):
-            left_func = self.left.build()
-            right_func = self.right.build()
+    pass
 
-            left_output = left_func(text)
-            right_output = right_func(text)
+@build_expr.register(AndExpr)
+def _(expr):
+    def func(text):
+        left_func = expr.left.build()
+        right_func = expr.right.build()
 
-            output = left_output[0] and right_output[0]
-            matches = set()
+        left_output = left_func(text)
+        right_output = right_func(text)
 
-            if output:
-                matches.update(left_output[1], right_output[1])
-            return (output, matches)
+        output = left_output[0] and right_output[0]
+        matches = set()
 
-        return func
+        if output:
+            matches.update(left_output[1], right_output[1])
+        return (output, matches)
+
+    return func
 
 
 class OrExpr(BinaryExpr):
-    def build(self):
-        def func(text):
-            left_func = self.left.build()
-            right_func = self.right.build()
+    pass
 
-            left_output = left_func(text)
-            right_output = right_func(text)
+@build_expr.register(OrExpr)
+def _(expr):
+    def func(text):
+        left_func = expr.left.build()
+        right_func = expr.right.build()
 
-            output = left_output[0] or right_output[0]
-            matches = set()
+        left_output = left_func(text)
+        right_output = right_func(text)
 
-            if output:
-                matches.update(left_output[1], right_output[1])
-            return (output, matches)
+        output = left_output[0] or right_output[0]
+        matches = set()
 
-        return func
+        if output:
+            matches.update(left_output[1], right_output[1])
+        return (output, matches)
+
+    return func
 
 
 class NotExpr(UnaryExpr):
     def __init__(self, input):
         self.input = input
 
-    def build(self):
-        def func(text):
-            input_func = self.input.build()
-            input_output = input_func(text)
+@build_expr.register(NotExpr)
+def _(expr):
+    def func(text):
+        input_func = expr.input.build()
+        input_output = input_func(text)
 
-            output = not input_output[0]
-            matches = set()
+        output = not input_output[0]
+        matches = set()
 
-            return (output, matches)
+        return (output, matches)
 
-        return func
+    return func
 
 
 class QuotedFilterExpr(FilterExpr):
