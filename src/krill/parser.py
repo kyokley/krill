@@ -7,14 +7,19 @@ from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
 
 class Expr:
     def build(self):
-        return build_expr(self)
+        return traverse(self, build_expr)
 
     def __str__(self):
         return print_expr(self)
 
 
 @singledispatch
-def build_expr(expr):
+def traverse(expr, func):
+    raise NotImplementedError
+
+
+@singledispatch
+def build_expr(expr, *funcs):
     raise NotImplementedError
 
 
@@ -23,22 +28,19 @@ def print_expr(expr):
     raise NotImplementedError
 
 
-class UnaryExpr(Expr):
-    pass
-
-
-@print_expr.register(UnaryExpr)
-def _(expr):
-    return f'{expr.__class__.__name__}({print_expr(expr.input)})'
-
-
 class FilterExpr(Expr):
     def __init__(self, token):
         self.filter = token[0].strip()
 
+
+@traverse.register(FilterExpr)
+def _(expr, func):
+    return func(expr, expr.filter)
+
+
 @build_expr.register(FilterExpr)
-def _(expr):
-    regex = re.compile(expr.filter, re.IGNORECASE)
+def filter_val(_, value):
+    regex = re.compile(value, re.IGNORECASE)
 
     def func(text):
         match = regex.search(text)
@@ -61,6 +63,13 @@ class BinaryExpr(Expr):
         self.right = right
 
 
+@traverse.register(BinaryExpr)
+def _(expr, func):
+    left = traverse(expr.left, func)
+    right = traverse(expr.right, func)
+    return func(expr, left, right)
+
+
 @print_expr.register(BinaryExpr)
 def _(expr):
     return f'{expr.__class__.__name__}({print_expr(expr.left)}, {print_expr(expr.right)})'
@@ -70,13 +79,10 @@ class AndExpr(BinaryExpr):
     pass
 
 @build_expr.register(AndExpr)
-def _(expr):
+def and_val(_, left, right):
     def func(text):
-        left_func = expr.left.build()
-        right_func = expr.right.build()
-
-        left_output = left_func(text)
-        right_output = right_func(text)
+        left_output = left(text)
+        right_output = right(text)
 
         output = left_output[0] and right_output[0]
         matches = set()
@@ -92,13 +98,10 @@ class OrExpr(BinaryExpr):
     pass
 
 @build_expr.register(OrExpr)
-def _(expr):
+def or_val(_, left, right):
     def func(text):
-        left_func = expr.left.build()
-        right_func = expr.right.build()
-
-        left_output = left_func(text)
-        right_output = right_func(text)
+        left_output = left(text)
+        right_output = right(text)
 
         output = left_output[0] or right_output[0]
         matches = set()
@@ -110,15 +113,23 @@ def _(expr):
     return func
 
 
+class UnaryExpr(Expr):
+    pass
+
+
+@print_expr.register(UnaryExpr)
+def _(expr):
+    return f'{expr.__class__.__name__}({print_expr(expr.input)})'
+
+
 class NotExpr(UnaryExpr):
     def __init__(self, input):
         self.input = input
 
 @build_expr.register(NotExpr)
-def _(expr):
+def not_val(_, value):
     def func(text):
-        input_func = expr.input.build()
-        input_output = input_func(text)
+        input_output = value(text)
 
         output = not input_output[0]
         matches = set()
