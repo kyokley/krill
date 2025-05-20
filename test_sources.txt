@@ -1,3 +1,5 @@
 https://twitter.com/hashtag/programming
 hackernews
 https://www.reddit.com/r/linux/.rss
+https://www.reddit.com/r/coolgithubprojects/.rss
+http://rss.slashdot.org/Slashdot/slashdot python || programming || vim || nix
