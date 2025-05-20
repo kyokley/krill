@@ -13,29 +13,64 @@ class Expr:
         return traverse(self, print_expr)
 
 
-@singledispatch
-def traverse(expr, func):
-    raise NotImplementedError
-
-
-@singledispatch
-def build_expr(expr, *funcs):
-    raise NotImplementedError
-
-
-@singledispatch
-def print_expr(expr, *funcs):
-    raise NotImplementedError
-
-
 class FilterExpr(Expr):
     def __init__(self, token):
         self.filter = token[0].strip()
 
 
+class QuotedFilterExpr(FilterExpr):
+    def __init__(self, filter):
+        self.filter = filter[0].strip().strip("'")
+
+
+class BinaryExpr(Expr):
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+
+class AndExpr(BinaryExpr):
+    pass
+
+
+class OrExpr(BinaryExpr):
+    pass
+
+
+class UnaryExpr(Expr):
+    def __init__(self, inner):
+        self.inner = inner
+
+
+class NotExpr(UnaryExpr):
+    pass
+
+
+@singledispatch
+def traverse(expr, func):
+    raise NotImplementedError
+
+
 @traverse.register(FilterExpr)
 def _(expr, func):
     return func(expr, expr.filter)
+
+
+@traverse.register(BinaryExpr)
+def _(expr, func):
+    left = traverse(expr.left, func)
+    right = traverse(expr.right, func)
+    return func(expr, left, right)
+
+
+@traverse.register(UnaryExpr)
+def _(expr, func):
+    return func(expr, expr.inner)
+
+
+@singledispatch
+def build_expr(expr, *funcs):
+    raise NotImplementedError
 
 
 @build_expr.register(FilterExpr)
@@ -51,32 +86,6 @@ def filter_val(_, value):
 
     return func
 
-
-@print_expr.register(FilterExpr)
-def print_filter_val(expr, value):
-    return f'{expr.__class__.__name__}({value})'
-
-
-class BinaryExpr(Expr):
-    def __init__(self, left, right):
-        self.left = left
-        self.right = right
-
-
-@traverse.register(BinaryExpr)
-def _(expr, func):
-    left = traverse(expr.left, func)
-    right = traverse(expr.right, func)
-    return func(expr, left, right)
-
-
-@print_expr.register(BinaryExpr)
-def print_binary_val(expr, left, right):
-    return f'{expr.__class__.__name__}({left}, {right})'
-
-
-class AndExpr(BinaryExpr):
-    pass
 
 @build_expr.register(AndExpr)
 def and_val(_, left, right):
@@ -94,9 +103,6 @@ def and_val(_, left, right):
     return func
 
 
-class OrExpr(BinaryExpr):
-    pass
-
 @build_expr.register(OrExpr)
 def or_val(_, left, right):
     def func(text):
@@ -113,31 +119,12 @@ def or_val(_, left, right):
     return func
 
 
-class UnaryExpr(Expr):
-    def __init__(self, input):
-        self.input = input
-
-
-@traverse.register(UnaryExpr)
-def _(expr, func):
-    return func(expr, expr.input)
-
-
-@print_expr.register(UnaryExpr)
-def print_unary_val(expr, input):
-    return f'{expr.__class__.__name__}({input})'
-
-
-class NotExpr(UnaryExpr):
-    pass
-
-
 @build_expr.register(NotExpr)
 def not_val(_, func):
     def func(text):
-        input_output = func(text)
+        inner_output = func(text)
 
-        output = not input_output[0]
+        output = not inner_output[0]
         matches = set()
 
         return (output, matches)
@@ -145,9 +132,24 @@ def not_val(_, func):
     return func
 
 
-class QuotedFilterExpr(FilterExpr):
-    def __init__(self, filter):
-        self.filter = filter[0].strip().strip("'")
+@singledispatch
+def print_expr(expr, *funcs):
+    raise NotImplementedError
+
+
+@print_expr.register(FilterExpr)
+def print_filter_val(expr, value):
+    return f'{expr.__class__.__name__}({value})'
+
+
+@print_expr.register(BinaryExpr)
+def print_binary_val(expr, left, right):
+    return f'{expr.__class__.__name__}({left}, {right})'
+
+
+@print_expr.register(UnaryExpr)
+def print_unary_val(expr, inner):
+    return f'{expr.__class__.__name__}({inner})'
 
 
 class TokenParser:
