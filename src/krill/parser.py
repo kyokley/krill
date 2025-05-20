@@ -10,7 +10,7 @@ class Expr:
         return traverse(self, build_expr)
 
     def __str__(self):
-        return print_expr(self)
+        return traverse(self, print_expr)
 
 
 @singledispatch
@@ -24,7 +24,7 @@ def build_expr(expr, *funcs):
 
 
 @singledispatch
-def print_expr(expr):
+def print_expr(expr, *funcs):
     raise NotImplementedError
 
 
@@ -53,8 +53,8 @@ def filter_val(_, value):
 
 
 @print_expr.register(FilterExpr)
-def _(expr):
-    return f'{expr.__class__.__name__}({expr.filter})'
+def print_filter_val(expr, value):
+    return f'{expr.__class__.__name__}({value})'
 
 
 class BinaryExpr(Expr):
@@ -71,8 +71,8 @@ def _(expr, func):
 
 
 @print_expr.register(BinaryExpr)
-def _(expr):
-    return f'{expr.__class__.__name__}({print_expr(expr.left)}, {print_expr(expr.right)})'
+def print_binary_val(expr, left, right):
+    return f'{expr.__class__.__name__}({left}, {right})'
 
 
 class AndExpr(BinaryExpr):
@@ -114,22 +114,28 @@ def or_val(_, left, right):
 
 
 class UnaryExpr(Expr):
-    pass
-
-
-@print_expr.register(UnaryExpr)
-def _(expr):
-    return f'{expr.__class__.__name__}({print_expr(expr.input)})'
-
-
-class NotExpr(UnaryExpr):
     def __init__(self, input):
         self.input = input
 
+
+@traverse.register(UnaryExpr)
+def _(expr, func):
+    return func(expr, expr.input)
+
+
+@print_expr.register(UnaryExpr)
+def print_unary_val(expr, input):
+    return f'{expr.__class__.__name__}({input})'
+
+
+class NotExpr(UnaryExpr):
+    pass
+
+
 @build_expr.register(NotExpr)
-def not_val(_, value):
+def not_val(_, func):
     def func(text):
-        input_output = value(text)
+        input_output = func(text)
 
         output = not input_output[0]
         matches = set()
