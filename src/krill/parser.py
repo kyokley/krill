@@ -1,12 +1,30 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 import re
 
+from functools import singledispatch
 from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
 
 
-class Expr(object):
+class Expr:
     def build(self):
         return (False, set())
+
+    def __str__(self):
+        return print_expr(self)
+
+
+@singledispatch
+def print_expr(expr):
+    raise NotImplementedError
+
+
+class UnaryExpr(Expr):
+    pass
+
+
+@print_expr.register(UnaryExpr)
+def _(expr):
+    return f'{expr.__class__.__name__}({print_expr(expr.input)})'
 
 
 class FilterExpr(Expr):
@@ -25,14 +43,21 @@ class FilterExpr(Expr):
 
         return func
 
-    def __str__(self):
-        return 'FilterExpr(%s)' % self.filter
+
+@print_expr.register(FilterExpr)
+def _(expr):
+    return f'{expr.__class__.__name__}({expr.filter})'
 
 
 class BinaryExpr(Expr):
     def __init__(self, left, right):
         self.left = left
         self.right = right
+
+
+@print_expr.register(BinaryExpr)
+def _(expr):
+    return f'{expr.__class__.__name__}({print_expr(expr.left)}, {print_expr(expr.right)})'
 
 
 class AndExpr(BinaryExpr):
@@ -53,9 +78,6 @@ class AndExpr(BinaryExpr):
 
         return func
 
-    def __str__(self):
-        return 'AndExpr(%s, %s)' % (self.left, self.right)
-
 
 class OrExpr(BinaryExpr):
     def build(self):
@@ -75,11 +97,8 @@ class OrExpr(BinaryExpr):
 
         return func
 
-    def __str__(self):
-        return 'OrExpr(%s, %s)' % (self.left, self.right)
 
-
-class NotExpr(Expr):
+class NotExpr(UnaryExpr):
     def __init__(self, input):
         self.input = input
 
@@ -95,19 +114,13 @@ class NotExpr(Expr):
 
         return func
 
-    def __str__(self):
-        return 'NotExpr(%s)' % (self.input)
-
 
 class QuotedFilterExpr(FilterExpr):
     def __init__(self, filter):
         self.filter = filter[0].strip().strip("'")
 
-    def __str__(self):
-        return 'QuotedFilterExpr(%s)' % self.filter
 
-
-class TokenParser(object):
+class TokenParser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = -1
