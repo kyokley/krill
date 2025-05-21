@@ -3,7 +3,7 @@ import re
 from functools import singledispatch
 
 
-class Expr:
+class _Expr:
     def build(self):
         return traverse(self, build_expr)
 
@@ -11,7 +11,7 @@ class Expr:
         return traverse(self, print_expr)
 
 
-class FilterExpr(Expr):
+class FilterExpr(_Expr):
     def __init__(self, token):
         self.filter = token[0].strip()
 
@@ -21,26 +21,26 @@ class QuotedFilterExpr(FilterExpr):
         self.filter = token[0].strip().strip("'")
 
 
-class BinaryExpr(Expr):
+class _BinaryExpr(_Expr):
     def __init__(self, left, right):
         self.left = left
         self.right = right
 
 
-class AndExpr(BinaryExpr):
+class AndExpr(_BinaryExpr):
     pass
 
 
-class OrExpr(BinaryExpr):
+class OrExpr(_BinaryExpr):
     pass
 
 
-class UnaryExpr(Expr):
+class _UnaryExpr(_Expr):
     def __init__(self, inner):
         self.inner = inner
 
 
-class NotExpr(UnaryExpr):
+class NotExpr(_UnaryExpr):
     pass
 
 
@@ -64,14 +64,14 @@ def _(expr, func):
     return func(expr, expr.filter)
 
 
-@traverse.register(BinaryExpr)
+@traverse.register(_BinaryExpr)
 def _(expr, func):
     left = traverse(expr.left, func)
     right = traverse(expr.right, func)
     return func(expr, left, right)
 
 
-@traverse.register(UnaryExpr)
+@traverse.register(_UnaryExpr)
 def _(expr, func):
     return func(expr, expr.inner)
 
@@ -144,11 +144,11 @@ def print_filter_val(expr, value):
     return f'{expr.__class__.__name__}({value})'
 
 
-@print_expr.register(BinaryExpr)
+@print_expr.register(_BinaryExpr)
 def print_binary_val(expr, left, right):
     return f'{expr.__class__.__name__}({left}, {right})'
 
 
-@print_expr.register(UnaryExpr)
+@print_expr.register(_UnaryExpr)
 def print_unary_val(expr, inner):
     return f'{expr.__class__.__name__}({inner})'
