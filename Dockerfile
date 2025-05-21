@@ -38,8 +38,8 @@ ENTRYPOINT ["uv", "run", "--no-dev", "krill"]
 CMD ["-u", "30", "-S", "/app/test_sources.txt"]
 
 FROM base AS prod
-RUN uv sync --no-dev
 COPY . /app
+RUN uv sync --no-dev
 
 
 FROM base AS dev-root
