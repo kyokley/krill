@@ -248,9 +248,7 @@ class Application:
         if interval_ave == 0:
             return 0
         else:
-            val = base_type_speed * (interval_ave + rand.normalvariate(0, 3.5))
-            if val <= 0:
-                return base_type_speed * interval_ave
+            val = max(0, base_type_speed * (interval_ave + rand.normalvariate(.5, 10)))
             return val
 
     @staticmethod
