@@ -34,15 +34,18 @@ USER user
 RUN uv venv --seed && \
         uv sync --no-dev --no-install-project
 
-COPY . /app
-
 ENTRYPOINT ["uv", "run", "--no-dev", "krill"]
 CMD ["-u", "30", "-S", "/app/test_sources.txt"]
 
 FROM base AS prod
+COPY . /app
 RUN uv sync --no-dev
 
+
 FROM base AS dev-root
+# This looks weird but just trying to take full advantage of caching
+RUN uv sync --no-install-project
+COPY . /app
 RUN uv sync
 USER root
 
