@@ -14,8 +14,8 @@ class Expr:
 
 
 class FilterExpr(Expr):
-    def __init__(self, token):
-        self.filter = token[0].strip()
+    def __init__(self, filter):
+        self.filter = filter[0].strip()
 
 
 class QuotedFilterExpr(FilterExpr):
@@ -138,8 +138,8 @@ def print_expr(expr, *funcs):
 
 
 @print_expr.register(FilterExpr)
-def print_filter_val(expr, value):
-    return f'{expr.__class__.__name__}({value})'
+def print_filter_val(expr, filter):
+    return f'{expr.__class__.__name__}({filter})'
 
 
 @print_expr.register(BinaryExpr)
