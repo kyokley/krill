@@ -1,5 +1,5 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
-from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
+from krill import lexer
 from krill.expression import FilterExpr, AndExpr, OrExpr, NotExpr, QuotedFilterExpr
 
 
@@ -31,33 +31,36 @@ class TokenParser:
 
     def E(self):
         arg1 = self.P()
-        while self.next() != self.end and self.next()[1] in (AND, OR):
+        while self.next() != self.end and self.next()[1] in (lexer.AND, lexer.OR):
             op = self.next()[1]
             self.consume()
             arg2 = self.P()
-            if op == AND:
-                arg1 = AndExpr(arg1, arg2)
-            elif op == OR:
-                arg1 = OrExpr(arg1, arg2)
+
+            match op:
+                case lexer.AND:
+                    arg1 = AndExpr(arg1, arg2)
+                case lexer.OR:
+                    arg1 = OrExpr(arg1, arg2)
         return arg1
 
     def P(self):
         expr = None
-        if self.next()[1] == QUOTED_FILTER:
-            expr = QuotedFilterExpr(self.next())
-            self.consume()
-        elif self.next()[1] == FILTER:
-            expr = FilterExpr(self.next())
-            self.consume()
-        elif self.next()[1] == LPAREN:
-            self.consume()
-            expr = self.E()
-            self.expect(RPAREN)
-        elif self.next()[1] == NOT:
-            self.consume()
-            expr = NotExpr(self.P())
-        else:
-            self.error()
+        match self.next()[1]:
+            case lexer.QUOTED_FILTER:
+                expr = QuotedFilterExpr(self.next())
+                self.consume()
+            case lexer.FILTER:
+                expr = FilterExpr(self.next())
+                self.consume()
+            case lexer.LPAREN:
+                self.consume()
+                expr = self.E()
+                self.expect(lexer.RPAREN)
+            case lexer.NOT:
+                self.consume()
+                expr = NotExpr(self.P())
+            case _:
+                self.error()
         return expr
 
     def buildFunc(self):
