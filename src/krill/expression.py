@@ -81,9 +81,8 @@ def filter_val(_, value):
     regex = re.compile(value, re.IGNORECASE)
 
     def func(text):
-        match = regex.search(text)
-        if match:
-            return (True, set([regex]))
+        if match := regex.search(text):
+            return (True, set([match.group()]))
         else:
             return (False, set())
 
@@ -96,12 +95,12 @@ def and_val(_, left, right):
         left_output = left(text)
         right_output = right(text)
 
-        output = left_output[0] and right_output[0]
-        matches = set()
+        if output := left_output[0] and right_output[0]:
+            matches = set()
 
-        if output:
             matches.update(left_output[1], right_output[1])
-        return (output, matches)
+            return (output, matches)
+        return False, set()
 
     return func
 
@@ -112,16 +111,16 @@ def or_val(_, left, right):
         left_output = left(text)
         right_output = right(text)
 
-        output = left_output[0] or right_output[0]
-        matches = set()
+        if output := left_output[0] or right_output[0]:
+            matches = set()
+            if left_output[1]:
+                matches.update(left_output[1])
 
-        if left_output[1]:
-            matches.update(left_output[1])
+            if right_output[1]:
+                matches.update(right_output[1])
 
-        if right_output[1]:
-            matches.update(right_output[1])
-
-        return (output, matches)
+            return (output, matches)
+        return False, set()
 
     return func
 
@@ -133,7 +132,6 @@ def not_val(_, func):
 
         output = not inner_output[0]
         matches = set()
-
         return (output, matches)
 
     return not_func

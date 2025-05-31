@@ -32,15 +32,16 @@ def lex(characters, token_exprs):
         for token_expr in token_exprs:
             pattern, tag = token_expr
             regex = re.compile(pattern)
-            match = regex.match(characters, pos)
-            if match:
+
+            if match := regex.match(characters, pos):
                 text = match.group(0).strip()
                 if tag:
                     token = (text, tag)
                     tokens.append(token)
                 break
+
         if not match:
-            print('Illegal character: %s\\n' % characters[pos:])
+            print(f'Illegal character: {characters[pos:]}\\n')
             sys.exit(1)
         else:
             pos = match.end(0)
