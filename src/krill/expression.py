@@ -95,7 +95,7 @@ def and_val(_, left, right):
         left_output = left(text)
         right_output = right(text)
 
-        if output := left_output[0] and right_output[0]:
+        if output := (left_output[0] and right_output[0]):
             matches = set()
 
             matches.update(left_output[1], right_output[1])
@@ -111,7 +111,7 @@ def or_val(_, left, right):
         left_output = left(text)
         right_output = right(text)
 
-        if output := left_output[0] or right_output[0]:
+        if output := (left_output[0] or right_output[0]):
             matches = set()
             if left_output[1]:
                 matches.update(left_output[1])
