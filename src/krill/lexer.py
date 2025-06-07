@@ -11,7 +11,7 @@ LPAREN = 'LPAREN'
 RPAREN = 'RPAREN'
 QUOTED_FILTER = 'QUOTED_FILTER'
 
-token_exprs = [
+TOKEN_EXPRS = (
     (r'[ \n\t]+', None),
     (r'#[^\n]*', None),
     (r'\(', LPAREN),
@@ -21,15 +21,15 @@ token_exprs = [
     (r'!', NOT),
     (r"'[^']*'", QUOTED_FILTER),
     (r'((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))', FILTER),
-]
+)
 
 
-def lex(characters, token_exprs):
+def filter_lex(characters):
     pos = 0
     tokens = []
     while pos < len(characters):
         match = None
-        for token_expr in token_exprs:
+        for token_expr in TOKEN_EXPRS:
             pattern, tag = token_expr
             regex = re.compile(pattern)
 
@@ -46,7 +46,3 @@ def lex(characters, token_exprs):
         else:
             pos = match.end(0)
     return tokens
-
-
-def filter_lex(characters):
-    return lex(characters, token_exprs)

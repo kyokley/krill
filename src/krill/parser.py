@@ -1,6 +1,102 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
+import re
+
 from krill import lexer
-from krill.expression import FilterExpr, AndExpr, OrExpr, NotExpr, QuotedFilterExpr
+from krill.expression import FilterExpr, AndExpr, OrExpr, NotExpr, QuotedFilterExpr, traverse, build_expr, print_expr
+
+
+@traverse.register(FilterExpr)
+def _(expr, func):
+    return func(expr, expr.filter)
+
+
+@traverse.register(AndExpr)
+@traverse.register(OrExpr)
+def _(expr, func):
+    left = traverse(expr.left, func)
+    right = traverse(expr.right, func)
+    return func(expr, left, right)
+
+
+@traverse.register(NotExpr)
+def _(expr, func):
+    return func(expr, expr.inner)
+
+
+@build_expr.register(FilterExpr)
+def _(expr, value):
+    regex = re.compile(value, re.IGNORECASE)
+
+    def func(text):
+        if match := regex.search(text):
+            return (True, set(match.group()))
+        else:
+            return (False, set())
+
+    return func
+
+
+@build_expr.register(AndExpr)
+def _(expr, left, right):
+    def func(text):
+        left_output = left(text)
+        right_output = right(text)
+
+        if output := (left_output[0] and right_output[0]):
+            matches = set()
+
+            matches.update(left_output[1], right_output[1])
+            return (output, matches)
+        return False, set()
+
+    return func
+
+
+@build_expr.register(OrExpr)
+def _(expr, left, right):
+    def func(text):
+        left_output = left(text)
+        right_output = right(text)
+
+        if output := (left_output[0] or right_output[0]):
+            matches = set()
+            if left_output[1]:
+                matches.update(left_output[1])
+
+            if right_output[1]:
+                matches.update(right_output[1])
+
+            return (output, matches)
+        return False, set()
+
+    return func
+
+
+@build_expr.register(NotExpr)
+def _(expr, func):
+    def not_func(text):
+        inner_output = func(text)
+
+        output = not inner_output[0]
+        return output, set()
+
+    return not_func
+
+
+@print_expr.register(FilterExpr)
+def _(expr, value):
+    return f'{expr.__class__.__name__}({value})'
+
+
+@print_expr.register(AndExpr)
+@print_expr.register(OrExpr)
+def _(expr, left, right):
+    return f'{expr.__class__.__name__}({left}, {right})'
+
+
+@print_expr.register(NotExpr)
+def _(expr, inner):
+    return f'{expr.__class__.__name__}({inner})'
 
 
 class TokenParser:
@@ -8,7 +104,6 @@ class TokenParser:
         self.tokens = tokens
         self.pos = -1
         self.end = object()
-        self.result = None
 
     def next(self):
         if self.pos + 1 < len(self.tokens):
@@ -45,18 +140,18 @@ class TokenParser:
 
     def P(self):
         expr = None
-        match self.next()[1]:
-            case lexer.QUOTED_FILTER:
-                expr = QuotedFilterExpr(self.next())
+        match self.next():
+            case filter, lexer.QUOTED_FILTER:
+                expr = QuotedFilterExpr(filter)
                 self.consume()
-            case lexer.FILTER:
-                expr = FilterExpr(self.next())
+            case filter, lexer.FILTER:
+                expr = FilterExpr(filter)
                 self.consume()
-            case lexer.LPAREN:
+            case _, lexer.LPAREN:
                 self.consume()
                 expr = self.E()
                 self.expect(lexer.RPAREN)
-            case lexer.NOT:
+            case _, lexer.NOT:
                 self.consume()
                 expr = NotExpr(self.P())
             case _:
