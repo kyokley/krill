@@ -21,7 +21,7 @@ import sys
 import warnings
 import json
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import feedparser
 from blessings import Terminal
@@ -38,8 +38,9 @@ rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 30
+REQUESTS_TIMEOUT = 1
 NUM_WORKERS = 3
+FILTER_LAST_DAYS = 90
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
@@ -93,6 +94,10 @@ class StreamParser:
             time_string = header.find("span", class_="_timestamp")["data-time"]
             timestamp = datetime.fromtimestamp(int(time_string))
 
+            last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
+            if timestamp < last_days_cutoff:
+                continue
+
             # Remove ellipsis characters added by Twitter
             text = await cls._html_to_text(str(tweet).replace("\u2026", " "))
 
@@ -119,6 +124,12 @@ class StreamParser:
                 if "published_parsed" in entry and entry.published_parsed
                 else None
             )
+
+            if timestamp:
+                last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
+                if timestamp < last_days_cutoff:
+                    continue
+
             title = entry.get("title")
             if 'description' in entry:
                 text = await cls._html_to_text(entry.description)
@@ -306,10 +317,16 @@ class Application:
                 continue
             story_time = story.get('time')
 
+            timestamp = datetime.fromtimestamp(story_time) if story_time else ''
+            if timestamp:
+                last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
+                if timestamp < last_days_cutoff:
+                    continue
+
             if story.get('url'):
                 yield StreamItem(
                     story.get('by', ''),
-                    datetime.fromtimestamp(story_time) if story_time else '',
+                    timestamp,
                     story.get('title', ''),
                     story.get('text', '').replace('<p>', '\n'),
                     story.get('url', ''),
