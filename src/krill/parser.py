@@ -29,7 +29,7 @@ def _(expr, value):
 
     def func(text):
         if match := regex.search(text):
-            return (True, set(match.group()))
+            return (True, set([match.group()]))
         else:
             return (False, set())
 
@@ -74,11 +74,13 @@ def _(expr, left, right):
 
 @build_expr.register(NotExpr)
 def _(expr, func):
-    def not_func(text):
-        inner_output = func(text)
+    regex = re.compile(func.filter, re.IGNORECASE)
 
-        output = not inner_output[0]
-        return output, set()
+    def not_func(text):
+        if match := regex.search(text):
+            return (False, set([match.group()]))
+        else:
+            return (True, set())
 
     return not_func
 
