@@ -37,28 +37,13 @@ def _(expr, value):
 
 
 @build_expr.register(AndExpr)
-def _(expr, left, right):
-    def func(text):
-        left_output = left(text)
-        right_output = right(text)
-
-        if output := (left_output[0] and right_output[0]):
-            matches = set()
-
-            matches.update(left_output[1], right_output[1])
-            return (output, matches)
-        return False, set()
-
-    return func
-
-
 @build_expr.register(OrExpr)
 def _(expr, left, right):
     def func(text):
         left_output = left(text)
         right_output = right(text)
 
-        if output := (left_output[0] or right_output[0]):
+        if output := expr.comparator(left_output[0], right_output[0]):
             matches = set()
             if left_output[1]:
                 matches.update(left_output[1])

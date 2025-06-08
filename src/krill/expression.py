@@ -24,13 +24,18 @@ class _BinaryExpr(_Expr):
         self.left = left
         self.right = right
 
+    def comparator(self, left, right):
+        raise NotImplementedError
+
 
 class AndExpr(_BinaryExpr):
-    pass
+    def comparator(self, left, right):
+        return left and right
 
 
 class OrExpr(_BinaryExpr):
-    pass
+    def comparator(self, left, right):
+        return left or right
 
 
 class _UnaryExpr(_Expr):
