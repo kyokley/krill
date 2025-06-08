@@ -7,7 +7,7 @@ from krill.expression import FilterExpr, AndExpr, OrExpr, NotExpr, QuotedFilterE
 
 @traverse.register(FilterExpr)
 def _(expr, func):
-    return func(expr, expr.filter)
+    return func(expr)
 
 
 @traverse.register(AndExpr)
@@ -20,14 +20,14 @@ def _(expr, func):
 
 @traverse.register(NotExpr)
 def _(expr, func):
-    return func(expr, expr.inner)
+    return func(expr)
 
 
 @build_expr.register(FilterExpr)
-def _(expr, value):
-    regex = re.compile(value, re.IGNORECASE)
-
+def _(expr):
     def func(text):
+        regex = re.compile(expr.filter, re.IGNORECASE)
+
         if match := regex.search(text):
             return (True, set([match.group()]))
         else:
@@ -58,10 +58,9 @@ def _(expr, left, right):
 
 
 @build_expr.register(NotExpr)
-def _(expr, func):
-    regex = re.compile(func.filter, re.IGNORECASE)
-
+def _(expr):
     def not_func(text):
+        regex = re.compile(expr.inner.filter, re.IGNORECASE)
         if match := regex.search(text):
             return (False, set([match.group()]))
         else:
@@ -71,8 +70,8 @@ def _(expr, func):
 
 
 @print_expr.register(FilterExpr)
-def _(expr, value):
-    return f'{expr.__class__.__name__}({value})'
+def _(expr):
+    return f'{expr.__class__.__name__}({expr.filter})'
 
 
 @print_expr.register(AndExpr)
@@ -82,8 +81,8 @@ def _(expr, left, right):
 
 
 @print_expr.register(NotExpr)
-def _(expr, inner):
-    return f'{expr.__class__.__name__}({inner})'
+def _(expr):
+    return f'{expr.__class__.__name__}({expr.inner})'
 
 
 class TokenParser:

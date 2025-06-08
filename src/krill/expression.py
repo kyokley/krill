@@ -38,13 +38,9 @@ class OrExpr(_BinaryExpr):
         return left or right
 
 
-class _UnaryExpr(_Expr):
+class NotExpr(_Expr):
     def __init__(self, inner):
         self.inner = inner
-
-
-class NotExpr(_UnaryExpr):
-    pass
 
 
 @singledispatch
