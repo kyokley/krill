@@ -30,9 +30,9 @@ from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from .lexer import filter_lex
 from .parser import TokenParser
 
-PROXY = os.environ.get('KRILL_PROXY') or None
+PROXY = os.environ.get("KRILL_PROXY") or None
 
-warnings.filterwarnings('ignore', category=MarkupResemblesLocatorWarning)
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 rand = random.SystemRandom()
 
@@ -49,9 +49,9 @@ _link_regex = re.compile(r"(?<=\S)(https?://|pics?.twitter.com)")
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
-HN_TOP_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/topstories.json'
-HN_NEW_STORIES_URL = 'https://hacker-news.firebaseio.com/v0/newstories.json'
-HN_STORY_URL_TEMPLATE = 'https://hacker-news.firebaseio.com/v0/item/{}.json'
+HN_TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
+HN_NEW_STORIES_URL = "https://hacker-news.firebaseio.com/v0/newstories.json"
+HN_STORY_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/{}.json"
 MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
 
@@ -68,7 +68,7 @@ class Quit(Exception):
 
 
 async def fix_html(text):
-    return _link_regex.sub(r' \1', text)
+    return _link_regex.sub(r" \1", text)
 
 
 def validate_timestamp(timestamp):
@@ -136,7 +136,7 @@ class StreamParser:
                 continue
 
             title = entry.get("title")
-            if 'description' in entry:
+            if "description" in entry:
                 text = await cls._html_to_text(entry.description)
             else:
                 text = None
@@ -150,7 +150,9 @@ class StreamParser:
 
             # At least one element must contain text for the item to be useful
             if title or text or link:
-                yield StreamItem(feed_title, timestamp, title, await fix_html(text), link)
+                yield StreamItem(
+                    feed_title, timestamp, title, await fix_html(text), link
+                )
 
 
 class TextExcerpter:
@@ -218,14 +220,14 @@ class Application:
         self.item_count = 0
         self._known_items = set()
         self.args = args
-        if self.args.text_speed_ave.lower() == 'fast':
+        if self.args.text_speed_ave.lower() == "fast":
             self.text_speed_ave = 1
-        elif self.args.text_speed_ave.lower() == 'slow':
+        elif self.args.text_speed_ave.lower() == "slow":
             self.text_speed_ave = 10
         else:
             speed = int(self.args.text_speed_ave)
             if speed < 0 or speed > 10:
-                raise ValueError('Speed is invalid. Got %s' % speed)
+                raise ValueError("Speed is invalid. Got %s" % speed)
             self.text_speed_ave = speed
 
         self.clear()
@@ -242,7 +244,6 @@ class Application:
             else:
                 re_funcs = global_patterns
             self.sources.append((source, re_funcs))
-
 
     def clear(self):
         self.items = list()
@@ -263,7 +264,7 @@ class Application:
         if interval_ave == 0:
             return 0
         else:
-            val = max(0, base_type_speed * (interval_ave + rand.normalvariate(.5, 10)))
+            val = max(0, base_type_speed * (interval_ave + rand.normalvariate(0.5, 10)))
             return val
 
     @staticmethod
@@ -310,29 +311,32 @@ class Application:
 
         for story_id in story_ids[:number_of_stories]:
             try:
-                async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
-                    resp = await client.get(HN_STORY_URL_TEMPLATE.format(story_id),
-                                            timeout=REQUESTS_TIMEOUT)
+                async with httpx.AsyncClient(
+                    follow_redirects=True, proxy=PROXY
+                ) as client:
+                    resp = await client.get(
+                        HN_STORY_URL_TEMPLATE.format(story_id), timeout=REQUESTS_TIMEOUT
+                    )
             except Exception as e:
-                await cls._print_error('Error getting HackerNews stories')
+                await cls._print_error("Error getting HackerNews stories")
                 await cls._print_error(str(e))
                 break
             story = resp.json()
             if not story:
                 continue
-            story_time = story.get('time')
+            story_time = story.get("time")
 
-            timestamp = datetime.fromtimestamp(story_time) if story_time else ''
+            timestamp = datetime.fromtimestamp(story_time) if story_time else ""
             if not validate_timestamp(timestamp):
                 continue
 
-            if story.get('url'):
+            if story.get("url"):
                 yield StreamItem(
-                    story.get('by', ''),
+                    story.get("by", ""),
                     timestamp,
-                    story.get('title', ''),
-                    story.get('text', '').replace('<p>', '\n'),
-                    story.get('url', ''),
+                    story.get("title", ""),
+                    story.get("text", "").replace("<p>", "\n"),
+                    story.get("url", ""),
                 )
 
     @classmethod
@@ -340,7 +344,7 @@ class Application:
         output = dict()
         lines = await cls._read_lines(filename)
         for line in lines:
-            data = line.partition(' ')
+            data = line.partition(" ")
             if data[1] and data[2]:
                 output[data[0]] = data[2]
             else:
@@ -409,10 +413,12 @@ class Application:
 
         if not self.args.snapshot:
             self._queue.put_nowait(
-                "{}. {}{}:".format(self.item_count, TERMINAL.cyan(item.source), time_label)
+                "{}. {}{}:".format(
+                    self.item_count, TERMINAL.cyan(item.source), time_label
+                )
             )
 
-        indent = ' ' * (len(str(self.item_count)) + 2)
+        indent = " " * (len(str(self.item_count)) + 2)
 
         if item.title is not None:
             if not self.args.snapshot:
@@ -424,11 +430,11 @@ class Application:
                             patterns,
                             TERMINAL.bold_black_on_bright_yellow,
                             TERMINAL.bold,
-                        )
+                        ),
                     )
                 )
             else:
-                snapshot_item['title'] = item.title
+                snapshot_item["title"] = item.title
 
         if item.text is not None and not self.args.snapshot:
             (excerpt, clipped_left, clipped_right) = await TextExcerpter.get_excerpt(
@@ -473,11 +479,11 @@ class Application:
                             patterns,
                             TERMINAL.black_on_yellow_underline,
                             TERMINAL.blue_underline,
-                        )
+                        ),
                     )
                 )
             else:
-                snapshot_item['link'] = item.link
+                snapshot_item["link"] = item.link
 
         if self.args.snapshot:
             self._queue.put_nowait(snapshot_item)
@@ -486,13 +492,19 @@ class Application:
         while True:
             url, patterns = await queue.get()
 
-            if 'hackernews' not in url.lower():
+            if "hackernews" not in url.lower():
                 try:
-                    async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
+                    async with httpx.AsyncClient(
+                        follow_redirects=True, proxy=PROXY
+                    ) as client:
                         headers = {
-                            'User-Agent': 'krillbot/0.4 (+http://github.com/kyokley/krill)',
+                            "User-Agent": "krillbot/0.4 (+http://github.com/kyokley/krill)",
                         }
-                        data = (await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)).content
+                        data = (
+                            await client.get(
+                                url, timeout=REQUESTS_TIMEOUT, headers=headers
+                            )
+                        ).content
 
                     if "//twitter.com/" in url:
                         async for stream_data in StreamParser.get_tweets(data):
@@ -520,19 +532,13 @@ class Application:
             if re_funcs:
                 for re_func in re_funcs:
                     title_matches = (
-                        item.title is not None
-                        and re_func(item.title)
-                        or (False, set())
+                        item.title is not None and re_func(item.title) or (False, set())
                     )
                     text_matches = (
-                        item.text is not None
-                        and re_func(item.text)
-                        or (False, set())
+                        item.text is not None and re_func(item.text) or (False, set())
                     )
                     link_matches = (
-                        item.link is not None
-                        and re_func(item.link)
-                        or (False, set())
+                        item.link is not None and re_func(item.link) or (False, set())
                     )
                     if title_matches[0] or text_matches[0] or link_matches[0]:
                         matched_texts = set()
@@ -553,7 +559,7 @@ class Application:
             await self._queue_item(item[0], item[1])
             queue.task_done()
 
-    async def flush_worker(self, queue, interval=.1):
+    async def flush_worker(self, queue, interval=0.1):
         while True:
             text = await queue.get()
 
@@ -569,7 +575,7 @@ class Application:
                         sys.stdout.write(text[idx])
                         idx += 1
                     sys.stdout.flush()
-                sys.stdout.write('\n')
+                sys.stdout.write("\n")
                 sys.stdout.flush()
             else:
                 print(json.dumps(text))
@@ -652,7 +658,6 @@ class Application:
         # Wait until all worker tasks are cancelled.
         await asyncio.gather(*tasks, return_exceptions=True)
 
-
     async def run(self):
         await self.populate_sources()
 
@@ -706,7 +711,7 @@ def main():
         "-S",
         "--sources-file",
         help="file from which to load source URLs "
-        + "(OPML format assumed if filename ends with \".opml\")",
+        + '(OPML format assumed if filename ends with ".opml")',
         metavar="FILE",
     )
     arg_parser.add_argument(
@@ -724,7 +729,7 @@ def main():
     )
     arg_parser.add_argument(
         "--snapshot",
-        action='store_true',
+        action="store_true",
         help="return a single snapshot of all headlines in json format",
     )
     arg_parser.add_argument(
@@ -739,7 +744,7 @@ def main():
     arg_parser.add_argument(
         "-t",
         "--text-speed-ave",
-        default='0',
+        default="0",
         type=str,
         help="text speed (0-10) 10 is slowest. 0 represents no delay. Default is 0.",
     )
@@ -750,9 +755,7 @@ def main():
             "either a source URL (-s) or a sources file (-S) must be given"
         )
 
-    asyncio.run(
-            Application(args).run()
-            )
+    asyncio.run(Application(args).run())
 
 
 if __name__ == "__main__":

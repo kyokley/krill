@@ -2,7 +2,16 @@
 import re
 
 from krill import lexer
-from krill.expression import FilterExpr, AndExpr, OrExpr, NotExpr, QuotedFilterExpr, traverse, build_expr, print_expr
+from krill.expression import (
+    FilterExpr,
+    AndExpr,
+    OrExpr,
+    NotExpr,
+    QuotedFilterExpr,
+    traverse,
+    build_expr,
+    print_expr,
+)
 
 
 @traverse.register(FilterExpr)
@@ -72,18 +81,18 @@ def _(expr, inner):
 
 @print_expr.register(FilterExpr)
 def _(expr):
-    return f'{expr.__class__.__name__}({expr.filter})'
+    return f"{expr.__class__.__name__}({expr.filter})"
 
 
 @print_expr.register(AndExpr)
 @print_expr.register(OrExpr)
 def _(expr, left, right):
-    return f'{expr.__class__.__name__}({left}, {right})'
+    return f"{expr.__class__.__name__}({left}, {right})"
 
 
 @print_expr.register(NotExpr)
 def _(expr, inner):
-    return f'{expr.__class__.__name__}({inner})'
+    return f"{expr.__class__.__name__}({inner})"
 
 
 class TokenParser:
@@ -103,7 +112,7 @@ class TokenParser:
             self.pos += 1
 
     def error(self):
-        raise Exception('Parser error')
+        raise Exception("Parser error")
 
     def expect(self, token_type):
         if self.next()[1] == token_type:
