@@ -21,7 +21,7 @@ import sys
 import warnings
 import json
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import feedparser
 from blessings import Terminal
@@ -38,8 +38,9 @@ rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 30
+REQUESTS_TIMEOUT = 1
 NUM_WORKERS = 3
+FILTER_LAST_DAYS = 90
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
@@ -70,6 +71,14 @@ async def fix_html(text):
     return _link_regex.sub(r' \1', text)
 
 
+def validate_timestamp(timestamp):
+    if not timestamp:
+        return False
+
+    last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
+    return timestamp > last_days_cutoff
+
+
 class StreamParser:
     @staticmethod
     async def _html_to_text(html):
@@ -93,6 +102,9 @@ class StreamParser:
             time_string = header.find("span", class_="_timestamp")["data-time"]
             timestamp = datetime.fromtimestamp(int(time_string))
 
+            if not validate_timestamp(timestamp):
+                continue
+
             # Remove ellipsis characters added by Twitter
             text = await cls._html_to_text(str(tweet).replace("\u2026", " "))
 
@@ -100,7 +112,7 @@ class StreamParser:
             link = f"https://twitter.com{tweet_href}"
 
             yield StreamItem(
-                ("%s (@%s)" % (name, username) if name else "@%s" % (username,)),
+                (f"{name} (@{username})" if name else "@{username}"),
                 timestamp,
                 None,
                 await fix_html(text),
@@ -119,6 +131,10 @@ class StreamParser:
                 if "published_parsed" in entry and entry.published_parsed
                 else None
             )
+
+            if not validate_timestamp(timestamp):
+                continue
+
             title = entry.get("title")
             if 'description' in entry:
                 text = await cls._html_to_text(entry.description)
@@ -153,8 +169,7 @@ class TextExcerpter:
         min_start, max_end = None, None
         if patterns is not None:
             for pattern in patterns:
-                match = pattern.search(text)
-                if match:
+                if match := pattern.search(text):
                     start, end = match.span()
                     if min_start is None:
                         min_start = start
@@ -223,7 +238,7 @@ class Application:
             if source_patterns:
                 tokens = filter_lex(source_patterns)
                 parser = TokenParser(tokens)
-                re_funcs = [parser.buildFunc()]
+                re_funcs = [parser.build()]
             else:
                 re_funcs = global_patterns
             self.sources.append((source, re_funcs))
@@ -248,9 +263,7 @@ class Application:
         if interval_ave == 0:
             return 0
         else:
-            val = base_type_speed * (interval_ave + rand.normalvariate(0, 3.5))
-            if val <= 0:
-                return base_type_speed * interval_ave
+            val = max(0, base_type_speed * (interval_ave + rand.normalvariate(.5, 10)))
             return val
 
     @staticmethod
@@ -309,10 +322,14 @@ class Application:
                 continue
             story_time = story.get('time')
 
+            timestamp = datetime.fromtimestamp(story_time) if story_time else ''
+            if not validate_timestamp(timestamp):
+                continue
+
             if story.get('url'):
                 yield StreamItem(
                     story.get('by', ''),
-                    datetime.fromtimestamp(story_time) if story_time else '',
+                    timestamp,
                     story.get('title', ''),
                     story.get('text', '').replace('<p>', '\n'),
                     story.get('url', ''),
@@ -336,7 +353,7 @@ class Application:
             with open(filename, "r") as myfile:
                 lines = [line.strip() for line in myfile.readlines()]
         except Exception as error:
-            await cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
+            await cls._print_error(f"Unable to read file '{filename}': {error}")
             sys.exit(1)
 
         # Discard empty lines and comments
@@ -351,7 +368,7 @@ class Application:
             with open(filename, "r") as myfile:
                 opml = myfile.read()
         except Exception as error:
-            await cls._print_error("Unable to read file '%s': %s" % (filename, str(error)))
+            await cls._print_error(f"Unable to read file '{filename}': {error}")
             sys.exit(1)
 
         return [
@@ -382,8 +399,7 @@ class Application:
             snapshot_item = dict()
 
         time_label = (
-            " on %s at %s"
-            % (
+            " on {} at {}".format(
                 TERMINAL.yellow(item.time.strftime("%a, %d %b %Y")),
                 TERMINAL.yellow(item.time.strftime("%H:%M")),
             )
@@ -393,7 +409,7 @@ class Application:
 
         if not self.args.snapshot:
             self._queue.put_nowait(
-                "%s. %s%s:" % (self.item_count, TERMINAL.cyan(item.source), time_label)
+                "{}. {}{}:".format(self.item_count, TERMINAL.cyan(item.source), time_label)
             )
 
         indent = ' ' * (len(str(self.item_count)) + 2)
@@ -401,15 +417,14 @@ class Application:
         if item.title is not None:
             if not self.args.snapshot:
                 self._queue.put_nowait(
-                    "%s%s"
-                    % (
+                    "{}{}".format(
                         indent,
                         await self._highlight_pattern(
                             item.title,
                             patterns,
                             TERMINAL.bold_black_on_bright_yellow,
                             TERMINAL.bold,
-                        ),
+                        )
                     )
                 )
             else:
@@ -439,8 +454,7 @@ class Application:
             )
 
             self._queue.put_nowait(
-                "%s%s%s%s"
-                % (
+                "{}{}{}{}".format(
                     indent,
                     "... " if clipped_left else "",
                     excerpt,
@@ -452,15 +466,14 @@ class Application:
             self._links[self.item_count] = item.link
             if not self.args.snapshot:
                 self._queue.put_nowait(
-                    "%s%s"
-                    % (
+                    "{}{}".format(
                         indent,
                         await self._highlight_pattern(
                             item.link,
                             patterns,
                             TERMINAL.black_on_yellow_underline,
                             TERMINAL.blue_underline,
-                        ),
+                        )
                     )
                 )
             else:
@@ -548,8 +561,7 @@ class Application:
                 idx = 0
                 while idx < len(text):
                     await asyncio.sleep(self.text_speed(interval))
-                    match = re.search(_invisible_codes, text[idx:])
-                    if match:
+                    if match := re.search(_invisible_codes, text[idx:]):
                         end = idx + match.span()[1]
                         sys.stdout.write(text[idx:end])
                         idx = end
@@ -595,11 +607,10 @@ class Application:
             try:
                 tokens = filter_lex(filter_string)
                 parser = TokenParser(tokens)
-                global_patterns.append(parser.buildFunc())
+                global_patterns.append(parser.build())
             except Exception as error:
                 await self._print_error(
-                    "Error while compiling regular expression '%s': %s"
-                    % (filter_string, str(error))
+                    f"Error while compiling regular expression '{filter_string}': {error}"
                 )
                 sys.exit(1)
 
@@ -617,7 +628,7 @@ class Application:
 
         tasks = []
         for _ in range(NUM_WORKERS):
-            for x in range(2):
+            for _ in range(2):
                 task = asyncio.create_task(self.source_worker(source_queue))
                 tasks.append(task)
 
@@ -647,9 +658,8 @@ class Application:
 
         if not self.args.snapshot:
             print(
-                "%s (%s)"
-                % (
-                    TERMINAL.bold("krill 0.5.0"),
+                "{} ({})".format(
+                    TERMINAL.bold("krill 0.5.1"),
                     TERMINAL.underline("https://github.com/kyokley/krill"),
                 )
             )

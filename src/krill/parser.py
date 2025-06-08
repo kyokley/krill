@@ -1,118 +1,96 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 import re
 
-from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN
+from krill import lexer
+from krill.expression import FilterExpr, AndExpr, OrExpr, NotExpr, QuotedFilterExpr, traverse, build_expr, print_expr
 
 
-class Expr(object):
-    def build(self):
-        return (False, set())
+@traverse.register(FilterExpr)
+def _(expr, func):
+    return func(expr)
 
 
-class FilterExpr(Expr):
-    def __init__(self, token):
-        self.filter = token[0].strip()
-
-    def build(self):
-        regex = re.compile(self.filter, re.IGNORECASE)
-
-        def func(text):
-            match = regex.search(text)
-            if match:
-                return (True, set([regex]))
-            else:
-                return (False, set())
-
-        return func
-
-    def __str__(self):
-        return 'FilterExpr(%s)' % self.filter
+@traverse.register(AndExpr)
+@traverse.register(OrExpr)
+def _(expr, func):
+    left = traverse(expr.left, func)
+    right = traverse(expr.right, func)
+    return func(expr, left, right)
 
 
-class BinaryExpr(Expr):
-    def __init__(self, left, right):
-        self.left = left
-        self.right = right
+@traverse.register(NotExpr)
+def _(expr, func):
+    inner = traverse(expr.inner, func)
+    return func(expr, inner)
 
 
-class AndExpr(BinaryExpr):
-    def build(self):
-        def func(text):
-            left_func = self.left.build()
-            right_func = self.right.build()
+@build_expr.register(FilterExpr)
+def _(expr):
+    def func(text):
+        regex = re.compile(expr.filter, re.IGNORECASE)
 
-            left_output = left_func(text)
-            right_output = right_func(text)
+        if match := regex.search(text):
+            return (True, set([match.group()]))
+        else:
+            return (False, set())
 
-            output = left_output[0] and right_output[0]
+    return func
+
+
+@build_expr.register(AndExpr)
+@build_expr.register(OrExpr)
+def _(expr, left, right):
+    def func(text):
+        left_output = left(text)
+        right_output = right(text)
+
+        if output := expr.comparator(left_output[0], right_output[0]):
             matches = set()
+            if left_output[1]:
+                matches.update(left_output[1])
 
-            if output:
-                matches.update(left_output[1], right_output[1])
-            return (output, matches)
-
-        return func
-
-    def __str__(self):
-        return 'AndExpr(%s, %s)' % (self.left, self.right)
-
-
-class OrExpr(BinaryExpr):
-    def build(self):
-        def func(text):
-            left_func = self.left.build()
-            right_func = self.right.build()
-
-            left_output = left_func(text)
-            right_output = right_func(text)
-
-            output = left_output[0] or right_output[0]
-            matches = set()
-
-            if output:
-                matches.update(left_output[1], right_output[1])
-            return (output, matches)
-
-        return func
-
-    def __str__(self):
-        return 'OrExpr(%s, %s)' % (self.left, self.right)
-
-
-class NotExpr(Expr):
-    def __init__(self, input):
-        self.input = input
-
-    def build(self):
-        def func(text):
-            input_func = self.input.build()
-            input_output = input_func(text)
-
-            output = not input_output[0]
-            matches = set()
+            if right_output[1]:
+                matches.update(right_output[1])
 
             return (output, matches)
+        return False, set()
 
-        return func
-
-    def __str__(self):
-        return 'NotExpr(%s)' % (self.input)
+    return func
 
 
-class QuotedFilterExpr(FilterExpr):
-    def __init__(self, filter):
-        self.filter = filter[0].strip().strip("'")
+@build_expr.register(NotExpr)
+def _(expr, inner):
+    def not_func(text):
+        inner_output = inner(text)
+        if inner_output[0]:
+            return (False, inner_output[1])
+        else:
+            return (True, inner_output[1])
 
-    def __str__(self):
-        return 'QuotedFilterExpr(%s)' % self.filter
+    return not_func
 
 
-class TokenParser(object):
+@print_expr.register(FilterExpr)
+def _(expr):
+    return f'{expr.__class__.__name__}({expr.filter})'
+
+
+@print_expr.register(AndExpr)
+@print_expr.register(OrExpr)
+def _(expr, left, right):
+    return f'{expr.__class__.__name__}({left}, {right})'
+
+
+@print_expr.register(NotExpr)
+def _(expr, inner):
+    return f'{expr.__class__.__name__}({inner})'
+
+
+class TokenParser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = -1
         self.end = object()
-        self.result = None
 
     def next(self):
         if self.pos + 1 < len(self.tokens):
@@ -135,34 +113,37 @@ class TokenParser(object):
 
     def E(self):
         arg1 = self.P()
-        while self.next() != self.end and self.next()[1] in (AND, OR):
+        while self.next() != self.end and self.next()[1] in (lexer.AND, lexer.OR):
             op = self.next()[1]
             self.consume()
             arg2 = self.P()
-            if op == AND:
-                arg1 = AndExpr(arg1, arg2)
-            elif op == OR:
-                arg1 = OrExpr(arg1, arg2)
+
+            match op:
+                case lexer.AND:
+                    arg1 = AndExpr(arg1, arg2)
+                case lexer.OR:
+                    arg1 = OrExpr(arg1, arg2)
         return arg1
 
     def P(self):
         expr = None
-        if self.next()[1] == QUOTED_FILTER:
-            expr = QuotedFilterExpr(self.next())
-            self.consume()
-        elif self.next()[1] == FILTER:
-            expr = FilterExpr(self.next())
-            self.consume()
-        elif self.next()[1] == LPAREN:
-            self.consume()
-            expr = self.E()
-            self.expect(RPAREN)
-        elif self.next()[1] == NOT:
-            self.consume()
-            expr = NotExpr(self.P())
-        else:
-            self.error()
+        match self.next():
+            case filter, lexer.QUOTED_FILTER:
+                expr = QuotedFilterExpr(filter)
+                self.consume()
+            case filter, lexer.FILTER:
+                expr = FilterExpr(filter)
+                self.consume()
+            case _, lexer.LPAREN:
+                self.consume()
+                expr = self.E()
+                self.expect(lexer.RPAREN)
+            case _, lexer.NOT:
+                self.consume()
+                expr = NotExpr(self.P())
+            case _:
+                self.error()
         return expr
 
-    def buildFunc(self):
+    def build(self):
         return self.E().build()
