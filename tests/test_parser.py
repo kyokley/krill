@@ -157,6 +157,27 @@ class TestParser:
         for neg_str in neg_strs:
             assert not test_func(neg_str)[0]
 
+    def test_mixed_grouping_not_expr(self):
+        test_str = '!(python is not fun || python is lame) && (python is simple || python is the best)'
+        tokens = filter_lex(test_str)
+        expected = 'AndExpr(NotExpr(OrExpr(FilterExpr(python is not fun), FilterExpr(python is lame))), OrExpr(FilterExpr(python is simple), FilterExpr(python is the best)))'
+        actual = str(TokenParser(tokens).E())
+        assert expected == actual
+
+        test_func = TokenParser(tokens).buildFunc()
+        affirm_strs = ('python is great, python is simple',
+                       'python is fun and python is the best',
+                       )
+        neg_strs = ('python is not fun but python is the great',
+                    'python is not fun and python is simple',
+                    'python is lame and python is simple',
+                    'python is lame and python is simple',
+                    )
+        for affirm_str in affirm_strs:
+            assert test_func(affirm_str)[0]
+        for neg_str in neg_strs:
+            assert not test_func(neg_str)[0]
+
 
     def test_multi_tier(self):
         test_str = 'a && (b || (c && d))'

@@ -20,7 +20,8 @@ def _(expr, func):
 
 @traverse.register(NotExpr)
 def _(expr, func):
-    return func(expr)
+    inner = traverse(expr.inner, func)
+    return func(expr, inner)
 
 
 @build_expr.register(FilterExpr)
@@ -58,13 +59,13 @@ def _(expr, left, right):
 
 
 @build_expr.register(NotExpr)
-def _(expr):
+def _(expr, inner):
     def not_func(text):
-        regex = re.compile(expr.inner.filter, re.IGNORECASE)
-        if match := regex.search(text):
-            return (False, set([match.group()]))
+        inner_output = inner(text)
+        if inner_output[0]:
+            return (False, inner_output[1])
         else:
-            return (True, set())
+            return (True, inner_output[1])
 
     return not_func
 
@@ -81,8 +82,8 @@ def _(expr, left, right):
 
 
 @print_expr.register(NotExpr)
-def _(expr):
-    return f'{expr.__class__.__name__}({expr.inner})'
+def _(expr, inner):
+    return f'{expr.__class__.__name__}({inner})'
 
 
 class TokenParser:
