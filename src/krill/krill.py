@@ -71,6 +71,14 @@ async def fix_html(text):
     return _link_regex.sub(r' \1', text)
 
 
+def validate_timestamp(timestamp):
+    if not timestamp:
+        return False
+
+    last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
+    return timestamp > last_days_cutoff
+
+
 class StreamParser:
     @staticmethod
     async def _html_to_text(html):
@@ -94,8 +102,7 @@ class StreamParser:
             time_string = header.find("span", class_="_timestamp")["data-time"]
             timestamp = datetime.fromtimestamp(int(time_string))
 
-            last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
-            if timestamp < last_days_cutoff:
+            if not validate_timestamp(timestamp):
                 continue
 
             # Remove ellipsis characters added by Twitter
@@ -125,10 +132,8 @@ class StreamParser:
                 else None
             )
 
-            if timestamp:
-                last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
-                if timestamp < last_days_cutoff:
-                    continue
+            if not validate_timestamp(timestamp):
+                continue
 
             title = entry.get("title")
             if 'description' in entry:
@@ -318,10 +323,8 @@ class Application:
             story_time = story.get('time')
 
             timestamp = datetime.fromtimestamp(story_time) if story_time else ''
-            if timestamp:
-                last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
-                if timestamp < last_days_cutoff:
-                    continue
+            if not validate_timestamp(timestamp):
+                continue
 
             if story.get('url'):
                 yield StreamItem(
