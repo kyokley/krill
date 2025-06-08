@@ -3,24 +3,24 @@
 import re
 import sys
 
-AND = 'AND'
-OR = 'OR'
-NOT = 'NOT'
-FILTER = 'FILTER'
-LPAREN = 'LPAREN'
-RPAREN = 'RPAREN'
-QUOTED_FILTER = 'QUOTED_FILTER'
+AND = "AND"
+OR = "OR"
+NOT = "NOT"
+FILTER = "FILTER"
+LPAREN = "LPAREN"
+RPAREN = "RPAREN"
+QUOTED_FILTER = "QUOTED_FILTER"
 
 TOKEN_EXPRS = (
-    (r'[ \n\t]+', None),
-    (r'#[^\n]*', None),
-    (r'\(', LPAREN),
-    (r'\)', RPAREN),
-    (r'&&', AND),
-    (r'\|\|', OR),
-    (r'!', NOT),
+    (r"[ \n\t]+", None),
+    (r"#[^\n]*", None),
+    (r"\(", LPAREN),
+    (r"\)", RPAREN),
+    (r"&&", AND),
+    (r"\|\|", OR),
+    (r"!", NOT),
     (r"'[^']*'", QUOTED_FILTER),
-    (r'((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))', FILTER),
+    (r"((?!(&&|\|\||\(|\))).)*(?=($|\n|\(|\)|&&|\|\|))", FILTER),
 )
 
 
@@ -41,7 +41,7 @@ def filter_lex(characters):
                 break
 
         if not match:
-            print(f'Illegal character: {characters[pos:]}\\n')
+            print(f"Illegal character: {characters[pos:]}\\n")
             sys.exit(1)
         else:
             pos = match.end(0)
