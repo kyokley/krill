@@ -233,7 +233,7 @@ class Application:
             if source_patterns:
                 tokens = filter_lex(source_patterns)
                 parser = TokenParser(tokens)
-                re_funcs = [parser.buildFunc()]
+                re_funcs = [parser.build()]
             else:
                 re_funcs = global_patterns
             self.sources.append((source, re_funcs))
@@ -604,7 +604,7 @@ class Application:
             try:
                 tokens = filter_lex(filter_string)
                 parser = TokenParser(tokens)
-                global_patterns.append(parser.buildFunc())
+                global_patterns.append(parser.build())
             except Exception as error:
                 await self._print_error(
                     f"Error while compiling regular expression '{filter_string}': {error}"
