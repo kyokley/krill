@@ -656,7 +656,7 @@ class Application:
         if not self.args.snapshot:
             print(
                 "{} ({})".format(
-                    TERMINAL.bold("krill 0.5.0"),
+                    TERMINAL.bold("krill 0.5.1"),
                     TERMINAL.underline("https://github.com/kyokley/krill"),
                 )
             )
