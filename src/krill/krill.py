@@ -38,14 +38,14 @@ rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 1
+REQUESTS_TIMEOUT = 3
 NUM_WORKERS = 3
 FILTER_LAST_DAYS = 90
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
 )  # ANSI color codes
-_link_regex = re.compile(r"(?<=\S)(https?://|pics?.twitter.com)")
+_link_regex = re.compile(r"(?<=\S)(https?://|pics?.x.com)")
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
@@ -109,7 +109,7 @@ class StreamParser:
             text = await cls._html_to_text(str(tweet).replace("\u2026", " "))
 
             tweet_href = header.find("a", class_="tweet-timestamp")["href"]
-            link = f"https://twitter.com{tweet_href}"
+            link = f"https://x.com{tweet_href}"
 
             yield StreamItem(
                 (f"{name} (@{username})" if name else "@{username}"),
@@ -498,26 +498,22 @@ class Application:
                         follow_redirects=True, proxy=PROXY
                     ) as client:
                         headers = {
-                            "User-Agent": "krillbot/0.4 (+http://github.com/kyokley/krill)",
+                            "User-Agent": "krillbot/0.5 (+http://github.com/kyokley/krill)",
                         }
                         data = (
                             await client.get(
                                 url, timeout=REQUESTS_TIMEOUT, headers=headers
                             )
                         ).content
-
-                    if "//twitter.com/" in url:
-                        async for stream_data in StreamParser.get_tweets(data):
-                            self._items_queue.put_nowait((stream_data, patterns))
-                    else:
-                        async for stream_data in StreamParser.get_feed_items(data, url):
-                            self._items_queue.put_nowait((stream_data, patterns))
-
                 except Exception as error:
-                    await self._print_error(
-                        f"Unable to retrieve data from URL '{url}': {error}"
-                    )
-                    # The problem might be temporary, so we do not exit
+                    await self._print_error(f"Unable to get data from {url}: {error}")
+
+                if "//x.com/" in url:
+                    async for stream_data in StreamParser.get_tweets(data):
+                        self._items_queue.put_nowait((stream_data, patterns))
+                else:
+                    async for stream_data in StreamParser.get_feed_items(data, url):
+                        self._items_queue.put_nowait((stream_data, patterns))
 
             else:
                 async for stream_data in self.hn_stories_generator():
