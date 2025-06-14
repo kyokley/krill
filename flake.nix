@@ -90,11 +90,11 @@
       # Enable no optional dependencies for production build.
       packages.x86_64-linux.default = pythonSet.mkVirtualEnv "krill-env" workspace.deps.default;
 
-      # Make hello runnable with `nix run`
+      # Make krill runnable with `nix run`
       apps.x86_64-linux = {
         default = {
           type = "app";
-          program = "${self.packages.x86_64-linux.default}/bin/hello";
+          program = "${self.packages.x86_64-linux.default}/bin/krill";
         };
       };
 
