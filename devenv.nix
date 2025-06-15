@@ -9,7 +9,8 @@
   };
 
   # https://devenv.sh/packages/
-  packages = [];
+  packages = [
+  ];
 
   # https://devenv.sh/languages/
   languages.python = {
