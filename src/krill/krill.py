@@ -40,7 +40,7 @@ rand = random.SystemRandom()
 base_type_speed = 0.01
 
 REQUESTS_TIMEOUT = 3
-NUM_WORKERS = 3
+NUM_WORKERS = 1
 FILTER_LAST_DAYS = 90
 REQUEST_WORKER_SLEEP = 3
 
@@ -333,10 +333,12 @@ class Application:
 
             url, patterns = await queue.get()
 
-            async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
-                resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
-
             try:
+                async with httpx.AsyncClient(
+                    follow_redirects=True, proxy=PROXY
+                ) as client:
+                    resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
+
                 resp.raise_for_status()
                 output_queue.put_nowait((url, resp.json(), patterns))
             except Exception as e:
@@ -350,14 +352,17 @@ class Application:
 
             url, patterns = await queue.get()
 
-            async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-                }
-                resp = await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)
-
             try:
-                resp.raise_for_status()
+                async with httpx.AsyncClient(
+                    follow_redirects=True, proxy=PROXY
+                ) as client:
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                    }
+                    resp = await client.get(
+                        url, timeout=REQUESTS_TIMEOUT, headers=headers
+                    )
+                    resp.raise_for_status()
 
                 if not resp.content.strip():
                     raise NoData("No data")
