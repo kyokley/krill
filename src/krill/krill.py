@@ -13,7 +13,6 @@ import os
 import asyncio
 import httpx
 import argparse
-import calendar
 import codecs
 import random
 import re
@@ -21,9 +20,11 @@ import sys
 import warnings
 import json
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from itertools import chain
 
-import feedparser
+from dateutil import parser as dt_parser
+from urllib.parse import urlparse
 from blessings import Terminal
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
@@ -41,6 +42,7 @@ base_type_speed = 0.01
 REQUESTS_TIMEOUT = 3
 NUM_WORKERS = 3
 FILTER_LAST_DAYS = 90
+REQUEST_WORKER_SLEEP = 3
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
@@ -59,7 +61,7 @@ MAX_NUMBER_OF_HN_STORIES = 5
 TERMINAL = Terminal()
 
 
-class PromptTimeout(Exception):
+class NoData(Exception):
     pass
 
 
@@ -71,11 +73,19 @@ async def fix_html(text):
     return _link_regex.sub(r" \1", text)
 
 
+async def extract_link(link):
+    match = re.search(r'https?://[^\s"]*', str(link))
+    return match and match.group()
+
+
 def validate_timestamp(timestamp):
     if not timestamp:
         return False
 
-    last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
+    if timestamp.tzinfo:
+        last_days_cutoff = datetime.now(timezone.utc) - timedelta(days=FILTER_LAST_DAYS)
+    else:
+        last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
     return timestamp > last_days_cutoff
 
 
@@ -120,33 +130,70 @@ class StreamParser:
             )
 
     @classmethod
-    async def get_feed_items(cls, xml, url):
-        feed_data = feedparser.parse(xml)
-        # Default to feed URL if no title element is present
-        feed_title = feed_data.feed.get("title", url)
+    async def _parse_feed(cls, xml):
+        # try:
+        #     feed_data = ElementTree.fromstring(xml)
+        #     for entry in feed_data.iter():
+        #         yield entry
+        # except Exception:
+        #     feed_data = RSSParser.parse(xml)
+        #     for entry in feed_data.iter():
+        #         yield entry
+        soup = BeautifulSoup(xml, "xml")
+        found = False
+        for entry in chain(soup.find_all("entry"), soup.find_all("item")):
+            yield entry
+            found = True
 
-        for entry in feed_data.entries:
-            timestamp = (
-                datetime.fromtimestamp(calendar.timegm(entry.published_parsed))
-                if "published_parsed" in entry and entry.published_parsed
-                else None
-            )
+        if not found:
+            raise Exception("Failed to find entries")
+
+    @classmethod
+    def _feed_item_date(cls, item):
+        if stripped := (item.date and item.date.text.strip()):
+            date_str = stripped
+        elif stripped := (item.published and item.published.text.strip()):
+            date_str = stripped
+        elif stripped := (item.pubDate and item.pubDate.text.strip()):
+            date_str = stripped
+        else:
+            return None
+
+        timestamp = dt_parser.parse(date_str)
+        return timestamp
+
+    @classmethod
+    async def get_feed_items(cls, xml, url):
+        feed_title = urlparse(url).netloc
+
+        async for entry in cls._parse_feed(xml):
+            timestamp = cls._feed_item_date(entry)
 
             if not validate_timestamp(timestamp):
                 continue
 
-            title = entry.get("title")
-            if "description" in entry:
-                text = await cls._html_to_text(entry.description)
-            else:
-                text = None
+            title = entry.title.text.strip()
+            if description := (entry.description and entry.description.text.strip()):
+                pass
+            elif description := entry.text.strip():
+                pass
+            text = await cls._html_to_text(description)
 
-            link = entry.get("link")
+            if link := (entry.link and entry.link.text.strip()):
+                pass
+            elif link := str(entry.link):
+                pass
+            else:
+                pass
+            link = await extract_link(link)
 
             # Some feeds put the text in the title element
             if text is None and title is not None:
                 text = title
                 title = None
+
+            if not text.strip():
+                pass
 
             # At least one element must contain text for the item to be useful
             if title or text or link:
@@ -171,7 +218,12 @@ class TextExcerpter:
         min_start, max_end = None, None
         if patterns is not None:
             for pattern in patterns:
-                if match := pattern.search(text):
+                if isinstance(pattern, str):
+                    regex = re.compile(pattern)
+                else:
+                    regex = pattern
+
+                if match := regex.search(text):
                     start, end = match.span()
                     if min_start is None:
                         min_start = start
@@ -250,7 +302,11 @@ class Application:
         self._queue = asyncio.Queue()
         self._items_queue = asyncio.Queue()
         self._output_queue = asyncio.Queue()
+        self._hn_resp_queue = asyncio.Queue()
+        self._html_resp_queue = asyncio.Queue()
+        self._request_queues = dict()
         self._links = dict()
+        self._tasks = []
 
     async def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
@@ -270,6 +326,71 @@ class Application:
     @staticmethod
     async def _print_error(error):
         print(TERMINAL.red(error), file=sys.stderr)
+
+    async def json_request_worker(self, queue, output_queue):
+        while True:
+            await asyncio.sleep(REQUEST_WORKER_SLEEP)
+
+            url, patterns = await queue.get()
+
+            async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
+                resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
+
+            try:
+                resp.raise_for_status()
+                output_queue.put_nowait((url, resp.json(), patterns))
+            except Exception as e:
+                await self._print_error(str(e))
+            finally:
+                queue.task_done()
+
+    async def html_request_worker(self, queue, output_queue):
+        while True:
+            await asyncio.sleep(REQUEST_WORKER_SLEEP)
+
+            url, patterns = await queue.get()
+
+            async with httpx.AsyncClient(follow_redirects=True, proxy=PROXY) as client:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                }
+                resp = await client.get(url, timeout=REQUESTS_TIMEOUT, headers=headers)
+
+            try:
+                resp.raise_for_status()
+
+                if not resp.content.strip():
+                    raise NoData("No data")
+
+                output_queue.put_nowait((url, resp.content, patterns))
+            except Exception as e:
+                await self._print_error(str(e))
+            finally:
+                queue.task_done()
+
+    async def _queue_request(self, url, patterns):
+        domain = urlparse(url).netloc
+        if "reddit" in url:
+            pass
+        if domain not in self._request_queues:
+            self._request_queues[domain] = asyncio.Queue()
+
+            for _ in range(NUM_WORKERS):
+                if "hackernews" in domain.lower() or "hacker-news" in domain.lower():
+                    task = asyncio.create_task(
+                        self.json_request_worker(
+                            self._request_queues[domain], self._hn_resp_queue
+                        )
+                    )
+                else:
+                    task = asyncio.create_task(
+                        self.html_request_worker(
+                            self._request_queues[domain], self._html_resp_queue
+                        )
+                    )
+                self._tasks.append(task)
+
+        self._request_queues[domain].put_nowait((url, patterns))
 
     @classmethod
     async def _hn_story_ids(cls, url, cb=None):
@@ -386,12 +507,16 @@ class Application:
     async def _highlight_pattern(text, patterns, pattern_style, text_style=None):
         if patterns is None:
             return text if text_style is None else text_style(text)
-        if text_style is None:
-            for pattern in patterns:
-                text = pattern.sub(pattern_style("\\g<0>"), text)
-            return text
         for pattern in patterns:
-            text = text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
+            if isinstance(pattern, str):
+                regex = re.compile(pattern)
+            else:
+                regex = pattern
+
+            if text_style is None:
+                text = regex.sub(pattern_style("\\g<0>"), text)
+            else:
+                text = text_style(regex.sub(pattern_style("\\g<0>") + text_style, text))
         return text
 
     async def _queue_item(self, item, patterns=None):
@@ -488,38 +613,30 @@ class Application:
         if self.args.snapshot:
             self._queue.put_nowait(snapshot_item)
 
-    async def source_worker(self, queue):
+    async def source_request_worker(self, queue):
         while True:
             url, patterns = await queue.get()
 
             if "hackernews" not in url.lower():
-                try:
-                    async with httpx.AsyncClient(
-                        follow_redirects=True, proxy=PROXY
-                    ) as client:
-                        headers = {
-                            "User-Agent": "krillbot/0.5 (+http://github.com/kyokley/krill)",
-                        }
-                        data = (
-                            await client.get(
-                                url, timeout=REQUESTS_TIMEOUT, headers=headers
-                            )
-                        ).content
-                except Exception as error:
-                    await self._print_error(f"Unable to get data from {url}: {error}")
-
-                if "//x.com/" in url:
-                    async for stream_data in StreamParser.get_tweets(data):
-                        self._items_queue.put_nowait((stream_data, patterns))
-                else:
-                    async for stream_data in StreamParser.get_feed_items(data, url):
-                        self._items_queue.put_nowait((stream_data, patterns))
-
+                await self._queue_request(url, patterns)
             else:
                 async for stream_data in self.hn_stories_generator():
                     self._items_queue.put_nowait((stream_data, patterns))
 
             queue.task_done()
+
+    async def html_source_worker(self):
+        while True:
+            url, data, patterns = await self._html_resp_queue.get()
+
+            if "//x.com/" in url:
+                async for stream_data in StreamParser.get_tweets(data):
+                    self._items_queue.put_nowait((stream_data, patterns))
+            else:
+                async for stream_data in StreamParser.get_feed_items(data, url):
+                    self._items_queue.put_nowait((stream_data, patterns))
+
+            self._html_resp_queue.task_done()
 
     async def stream_worker(self, queue):
         while True:
@@ -628,31 +745,37 @@ class Application:
 
         self.items = list()
 
-        tasks = []
         for _ in range(NUM_WORKERS):
-            for _ in range(2):
-                task = asyncio.create_task(self.source_worker(source_queue))
-                tasks.append(task)
+            task = asyncio.create_task(self.source_request_worker(source_queue))
+            self._tasks.append(task)
+
+            task = asyncio.create_task(self.html_source_worker())
+            self._tasks.append(task)
 
             task = asyncio.create_task(self.stream_worker(self._items_queue))
-            tasks.append(task)
+            self._tasks.append(task)
 
             task = asyncio.create_task(self.output_worker(self._output_queue))
-            tasks.append(task)
+            self._tasks.append(task)
 
         task = asyncio.create_task(self.flush_worker(self._queue, self.text_speed_ave))
-        tasks.append(task)
+        self._tasks.append(task)
 
         await source_queue.join()
         await self._items_queue.join()
         await self._output_queue.join()
         await self._queue.join()
+        await self._hn_resp_queue.join()
+        await self._html_resp_queue.join()
 
-        for task in tasks:
+        for queue in self._request_queues.values():
+            await queue.join()
+
+        for task in self._tasks:
             task.cancel()
 
-        # Wait until all worker tasks are cancelled.
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Wait until all worker self._tasks are cancelled.
+        await asyncio.gather(*self._tasks, return_exceptions=True)
 
     async def run(self):
         await self.populate_sources()
