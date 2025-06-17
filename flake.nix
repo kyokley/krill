@@ -75,15 +75,15 @@
           version = thisProjectAsNixPkg.version;
           src = ./.; # Source of your main script
 
-          nativeBuildInputs = [ pkgs.makeWrapper pkgs.python312Packages.setuptoolsBuildHook ];
-          buildInputs = [ noDevPythonEnv pkgs.python312Packages.setuptoolsBuildHook ]; # Runtime Python environment
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          buildInputs = [ noDevPythonEnv ]; # Runtime Python environment
 
           installPhase = ''
             mkdir -p $out/bin
-            # cp main.py $out/bin/${thisProjectAsNixPkg.pname}-script
-            chmod +x $out/bin/${thisProjectAsNixPkg.pname}
-            makeWrapper ${noDevPythonEnv}/bin/python $out/bin/${thisProjectAsNixPkg.pname}
-              # --add-flags $out/bin/${thisProjectAsNixPkg.pname}-script
+            cp ${noDevPythonEnv}/bin/krill $out/bin/${thisProjectAsNixPkg.pname}-script
+            chmod +x $out/bin/${thisProjectAsNixPkg.pname}-script
+            makeWrapper ${noDevPythonEnv}/bin/python $out/bin/${thisProjectAsNixPkg.pname} \
+              --add-flags $out/bin/${thisProjectAsNixPkg.pname}-script
           '';
         };
         packages.${thisProjectAsNixPkg.pname} = self.packages.${system}.default;
