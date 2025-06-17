@@ -40,7 +40,7 @@ rand = random.SystemRandom()
 base_type_speed = 0.01
 
 REQUESTS_TIMEOUT = 3
-NUM_WORKERS = 1
+NUM_WORKERS = 3
 FILTER_LAST_DAYS = 90
 REQUEST_WORKER_SLEEP = 3
 
