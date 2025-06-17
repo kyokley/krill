@@ -43,6 +43,7 @@ REQUESTS_TIMEOUT = 3
 NUM_WORKERS = 3
 FILTER_LAST_DAYS = 90
 REQUEST_WORKER_SLEEP = 3
+OVERRIDE_REQUEST_WORKERS = {"reddit": 1}
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
@@ -131,14 +132,6 @@ class StreamParser:
 
     @classmethod
     async def _parse_feed(cls, xml):
-        # try:
-        #     feed_data = ElementTree.fromstring(xml)
-        #     for entry in feed_data.iter():
-        #         yield entry
-        # except Exception:
-        #     feed_data = RSSParser.parse(xml)
-        #     for entry in feed_data.iter():
-        #         yield entry
         soup = BeautifulSoup(xml, "xml")
         found = False
         for entry in chain(soup.find_all("entry"), soup.find_all("item")):
@@ -305,6 +298,7 @@ class Application:
         self._hn_resp_queue = asyncio.Queue()
         self._html_resp_queue = asyncio.Queue()
         self._request_queues = dict()
+        self._semaphores = dict()
         self._links = dict()
         self._tasks = []
 
@@ -327,10 +321,13 @@ class Application:
     async def _print_error(error):
         print(TERMINAL.red(error), file=sys.stderr)
 
-    async def json_request_worker(self, queue, output_queue):
+    async def json_request_worker(self, queue, semaphore, output_queue):
         while True:
             await asyncio.sleep(REQUEST_WORKER_SLEEP)
+            if semaphore.locked():
+                continue
 
+            await semaphore.acquire()
             url, patterns = await queue.get()
 
             try:
@@ -344,12 +341,16 @@ class Application:
             except Exception as e:
                 await self._print_error(str(e))
             finally:
+                semaphore.release()
                 queue.task_done()
 
-    async def html_request_worker(self, queue, output_queue):
+    async def html_request_worker(self, queue, semaphore, output_queue):
         while True:
             await asyncio.sleep(REQUEST_WORKER_SLEEP)
+            if semaphore.locked():
+                continue
 
+            await semaphore.acquire()
             url, patterns = await queue.get()
 
             try:
@@ -371,26 +372,37 @@ class Application:
             except Exception as e:
                 await self._print_error(str(e))
             finally:
+                semaphore.release()
                 queue.task_done()
 
     async def _queue_request(self, url, patterns):
         domain = urlparse(url).netloc
-        if "reddit" in url:
-            pass
         if domain not in self._request_queues:
             self._request_queues[domain] = asyncio.Queue()
+            for dom, value in OVERRIDE_REQUEST_WORKERS.items():
+                if dom.lower() in domain:
+                    num_workers = value
+                    break
+            else:
+                num_workers = NUM_WORKERS
 
-            for _ in range(NUM_WORKERS):
+            self._semaphores[domain] = asyncio.Semaphore(num_workers)
+
+            for _ in range(num_workers):
                 if "hackernews" in domain.lower() or "hacker-news" in domain.lower():
                     task = asyncio.create_task(
                         self.json_request_worker(
-                            self._request_queues[domain], self._hn_resp_queue
+                            self._request_queues[domain],
+                            self._semaphores[domain],
+                            self._hn_resp_queue,
                         )
                     )
                 else:
                     task = asyncio.create_task(
                         self.html_request_worker(
-                            self._request_queues[domain], self._html_resp_queue
+                            self._request_queues[domain],
+                            self._semaphores[domain],
+                            self._html_resp_queue,
                         )
                     )
                 self._tasks.append(task)
