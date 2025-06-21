@@ -1,7 +1,7 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 import re
 
-from krill import lexer
+from . import lexer
 from krill.expression import (
     FilterExpr,
     AndExpr,
