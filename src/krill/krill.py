@@ -32,10 +32,11 @@ rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 3
+REQUESTS_TIMEOUT = 5
 NUM_WORKERS = 3
 REQUEST_WORKER_SLEEP = 3
 OVERRIDE_REQUEST_WORKERS = {"reddit": 1}
+EXCERPT_LENGTH = 500
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
@@ -47,6 +48,9 @@ HN_NEW_STORIES_URL = "https://hacker-news.firebaseio.com/v0/newstories.json"
 HN_STORY_URL_TEMPLATE = "https://hacker-news.firebaseio.com/v0/item/{}.json"
 MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
+
+
+OUTPUT_LOCK = asyncio.Lock()
 
 
 TERMINAL = Terminal()
@@ -108,6 +112,7 @@ class Application:
             # Do not print an item more than once
             return
         self._known_items.add(item_id)
+        await self._print_error(item.text)
         self._output_queue.put_nowait((item, patterns))
 
     def text_speed(self, interval_ave):
@@ -119,7 +124,8 @@ class Application:
 
     @staticmethod
     async def _print_error(error):
-        print(TERMINAL.red(error), file=sys.stderr)
+        async with OUTPUT_LOCK:
+            print(TERMINAL.red(error), file=sys.stderr)
 
     async def json_request_worker(self, queue, semaphore, output_queue):
         while True:
@@ -160,17 +166,24 @@ class Application:
                     headers = {
                         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
                     }
+                    # sys.stdout.write(f'Start request: {url}\n')
+                    # sys.stdout.flush()
                     resp = await client.get(
                         url, timeout=REQUESTS_TIMEOUT, headers=headers
                     )
                     resp.raise_for_status()
+                    # sys.stdout.write(f'Finish request: {url}\n')
+                    # sys.stdout.flush()
 
                 if not resp.content.strip():
                     raise NoData("No data")
 
                 output_queue.put_nowait((url, resp.content, patterns))
+            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                await self._print_error(f"{url} -> {e.__class__.__name__}: {e}")
             except Exception as e:
-                await self._print_error(str(e))
+                await self._print_error(f"{url} -> {e}")
+                raise
             finally:
                 semaphore.release()
                 queue.task_done()
@@ -380,7 +393,7 @@ class Application:
 
         if item.text is not None and not self.args.snapshot:
             (excerpt, clipped_left, clipped_right) = await TextExcerpter.get_excerpt(
-                item.text, 300, patterns
+                item.text, EXCERPT_LENGTH, patterns
             )
 
             # Hashtag or mention
@@ -434,83 +447,96 @@ class Application:
         while True:
             url, patterns = await queue.get()
 
-            if "hackernews" not in url.lower():
-                await self._queue_request(url, patterns)
-            else:
-                async for stream_data in self.hn_stories_generator():
-                    self._items_queue.put_nowait((stream_data, patterns))
-
-            queue.task_done()
+            try:
+                if "hackernews" not in url.lower():
+                    await self._queue_request(url, patterns)
+                else:
+                    async for stream_data in self.hn_stories_generator():
+                        self._items_queue.put_nowait((stream_data, patterns))
+            finally:
+                queue.task_done()
 
     async def html_source_worker(self):
         while True:
             url, data, patterns = await self._html_resp_queue.get()
 
-            if "//x.com/" in url:
-                async for stream_data in StreamParser.get_tweets(data):
-                    self._items_queue.put_nowait((stream_data, patterns))
-            else:
-                async for stream_data in StreamParser.get_feed_items(data, url):
-                    self._items_queue.put_nowait((stream_data, patterns))
-
-            self._html_resp_queue.task_done()
+            try:
+                if "//x.com/" in url:
+                    async for stream_data in StreamParser.get_tweets(data):
+                        self._items_queue.put_nowait((stream_data, patterns))
+                else:
+                    async for stream_data in StreamParser.get_feed_items(data, url):
+                        self._items_queue.put_nowait((stream_data, patterns))
+            finally:
+                self._html_resp_queue.task_done()
 
     async def stream_worker(self, queue):
         while True:
             item, re_funcs = await queue.get()
 
-            if re_funcs:
-                for re_func in re_funcs:
-                    title_matches = (
-                        item.title is not None and re_func(item.title) or (False, set())
-                    )
-                    text_matches = (
-                        item.text is not None and re_func(item.text) or (False, set())
-                    )
-                    link_matches = (
-                        item.link is not None and re_func(item.link) or (False, set())
-                    )
-                    if title_matches[0] or text_matches[0] or link_matches[0]:
-                        matched_texts = set()
-                        matched_texts.update(
-                            title_matches[1], text_matches[1], link_matches[1]
+            try:
+                if re_funcs:
+                    for re_func in re_funcs:
+                        title_matches = (
+                            item.title is not None
+                            and re_func(item.title)
+                            or (False, set())
                         )
-                        await self.add_item(item, matched_texts)
-                        break
-            else:
-                # No filter patterns specified; simply print all items
-                await self.add_item(item)
-
-            queue.task_done()
+                        text_matches = (
+                            item.text is not None
+                            and re_func(item.text)
+                            or (False, set())
+                        )
+                        link_matches = (
+                            item.link is not None
+                            and re_func(item.link)
+                            or (False, set())
+                        )
+                        if title_matches[0] or text_matches[0] or link_matches[0]:
+                            matched_texts = set()
+                            matched_texts.update(
+                                title_matches[1], text_matches[1], link_matches[1]
+                            )
+                            await self.add_item(item, matched_texts)
+                            break
+                else:
+                    # No filter patterns specified; simply print all items
+                    await self.add_item(item)
+            finally:
+                queue.task_done()
 
     async def output_worker(self, queue):
         while True:
             item = await queue.get()
-            await self._queue_item(item[0], item[1])
-            queue.task_done()
+            try:
+                await self._queue_item(item[0], item[1])
+            finally:
+                queue.task_done()
 
     async def flush_worker(self, queue, interval=0.1):
         while True:
             text = await queue.get()
 
-            if not self.args.snapshot:
-                idx = 0
-                while idx < len(text):
-                    await asyncio.sleep(self.text_speed(interval))
-                    if match := re.search(_invisible_codes, text[idx:]):
-                        end = idx + match.span()[1]
-                        sys.stdout.write(text[idx:end])
-                        idx = end
+            try:
+                async with OUTPUT_LOCK:
+                    if not self.args.snapshot:
+                        idx = 0
+                        while idx < len(text):
+                            await asyncio.sleep(self.text_speed(interval))
+                            if match := re.search(_invisible_codes, text[idx:]):
+                                end = idx + match.span()[1]
+                                sys.stdout.write(text[idx:end])
+                                idx = end
+                            else:
+                                sys.stdout.write(text[idx])
+                                idx += 1
+                            sys.stdout.flush()
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
                     else:
-                        sys.stdout.write(text[idx])
-                        idx += 1
-                    sys.stdout.flush()
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-            else:
-                print(json.dumps(text))
-
-            queue.task_done()
+                        print(json.dumps(text))
+            finally:
+                queue.task_done()
 
     async def _sources(self):
         # Reload sources and filters to allow for live editing

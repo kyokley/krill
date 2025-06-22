@@ -117,9 +117,6 @@ class StreamParser:
                 text = title
                 title = None
 
-            if not text.strip():
-                pass
-
             # At least one element must contain text for the item to be useful
             if title or text or link:
                 yield StreamItem(
@@ -165,7 +162,7 @@ class TextExcerpter:
     # and containing the first match of pattern, if specified
     @classmethod
     async def get_excerpt(cls, text, max_length, patterns=None):
-        if len(text) <= max_length:
+        if len(text) <= max_length or True:
             return text, False, False
 
         start, end = await cls._get_max_pattern_span(text, patterns)
