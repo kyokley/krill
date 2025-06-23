@@ -1,7 +1,8 @@
 import pytest
 
 from unittest import mock
-from krill.krill import Application, fix_html
+from krill.krill import Application
+from krill.feed.parser import fix_html
 import builtins
 
 pytest_plugins = ("pytest_asyncio",)

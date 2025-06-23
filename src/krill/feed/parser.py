@@ -14,7 +14,7 @@ from krill.utils import validate_timestamp
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
-_link_regex = re.compile(r"(?<=\S)(https?://|pics?.x.com)")
+_link_regex = re.compile(r"(?<=\S)(https?://|pics?.(x|twitter).com)")
 
 StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
