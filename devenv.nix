@@ -53,6 +53,10 @@
   git-hooks.hooks = {
     ruff.enable = true;
     ruff-format.enable = true;
+    isort = {
+      enable = true;
+      settings.profile = "black";
+    };
   };
 
   # See full reference at https://devenv.sh/reference/options/

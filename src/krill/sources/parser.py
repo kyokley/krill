@@ -3,14 +3,14 @@ import re
 
 from . import lexer
 from .expression import (
-    FilterExpr,
     AndExpr,
-    OrExpr,
+    FilterExpr,
     NotExpr,
+    OrExpr,
     QuotedFilterExpr,
-    traverse,
     build_expr,
     print_expr,
+    traverse,
 )
 
 

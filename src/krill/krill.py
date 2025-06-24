@@ -7,24 +7,24 @@
 #
 # Released under the terms of the GNU General Public License, version 3
 # (https://gnu.org/licenses/gpl.html)
-import os
-import asyncio
-import httpx
 import argparse
+import asyncio
 import codecs
+import json
+import os
 import random
 import re
 import sys
-import json
 from datetime import datetime
-
 from urllib.parse import urlparse
+
+import httpx
 from blessings import Terminal
 
+from .feed.parser import StreamItem, StreamParser, TextExcerpter
 from .sources.lexer import filter_lex
 from .sources.parser import TokenParser
 from .utils import validate_timestamp
-from .feed.parser import StreamItem, StreamParser, TextExcerpter
 
 PROXY = os.environ.get("KRILL_PROXY") or None
 

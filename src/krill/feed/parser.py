@@ -1,15 +1,14 @@
 import re
 import warnings
 from collections import namedtuple
+from datetime import datetime
 from itertools import chain
 from urllib.parse import urlparse
 
-from dateutil import parser as dt_parser
-from datetime import datetime
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
+from dateutil import parser as dt_parser
 
 from krill.utils import validate_timestamp
-
 
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
