@@ -32,9 +32,11 @@ rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 5
-NUM_WORKERS = 3
+REQUESTS_TIMEOUT = 10
+NUM_WORKERS = 1
 REQUEST_WORKER_SLEEP = 3
+REQUEST_RETRIES = 3
+RETRY_SLEEP = 1
 OVERRIDE_REQUEST_WORKERS = {"reddit": 1}
 EXCERPT_LENGTH = 500
 
@@ -112,7 +114,6 @@ class Application:
             # Do not print an item more than once
             return
         self._known_items.add(item_id)
-        await self._print_error(item.text)
         self._output_queue.put_nowait((item, patterns))
 
     def text_speed(self, interval_ave):
@@ -160,30 +161,39 @@ class Application:
             url, patterns = await queue.get()
 
             try:
-                async with httpx.AsyncClient(
-                    follow_redirects=True, proxy=PROXY
-                ) as client:
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-                    }
-                    # sys.stdout.write(f'Start request: {url}\n')
-                    # sys.stdout.flush()
-                    resp = await client.get(
-                        url, timeout=REQUESTS_TIMEOUT, headers=headers
-                    )
-                    resp.raise_for_status()
-                    # sys.stdout.write(f'Finish request: {url}\n')
-                    # sys.stdout.flush()
+                for i in range(REQUEST_RETRIES):
+                    try:
+                        await asyncio.sleep(RETRY_SLEEP)
 
-                if not resp.content.strip():
-                    raise NoData("No data")
+                        async with httpx.AsyncClient(
+                            follow_redirects=True, proxy=PROXY
+                        ) as client:
+                            headers = {
+                                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                            }
+                            resp = await client.get(
+                                url, timeout=REQUESTS_TIMEOUT, headers=headers
+                            )
+                            resp.raise_for_status()
 
-                output_queue.put_nowait((url, resp.content, patterns))
-            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
-                await self._print_error(f"{url} -> {e.__class__.__name__}: {e}")
-            except Exception as e:
-                await self._print_error(f"{url} -> {e}")
-                raise
+                        if not resp.content.strip():
+                            raise NoData("No data")
+
+                        output_queue.put_nowait((url, resp.content, patterns))
+                        break
+                    except (
+                        httpx.ReadTimeout,
+                        httpx.ConnectTimeout,
+                        httpx.ConnectError,
+                    ) as e:
+                        await self._print_error(
+                            f"Attempt {i}: {url} -> {e.__class__.__name__}: {e}"
+                        )
+                    except Exception as e:
+                        await self._print_error(
+                            f"Attempt {i}: {url} -> {e.__class__.__name__}: {e}"
+                        )
+                        raise
             finally:
                 semaphore.release()
                 queue.task_done()
@@ -502,6 +512,8 @@ class Application:
                 else:
                     # No filter patterns specified; simply print all items
                     await self.add_item(item)
+            except Exception as e:
+                await self._print_error(f"Item {item}: {e.__class__.__name__}: {e}")
             finally:
                 queue.task_done()
 
@@ -604,12 +616,13 @@ class Application:
         task = asyncio.create_task(self.flush_worker(self._queue, self.text_speed_ave))
         self._tasks.append(task)
 
+        await asyncio.sleep(REQUESTS_TIMEOUT)
         await source_queue.join()
+        await self._hn_resp_queue.join()
+        await self._html_resp_queue.join()
         await self._items_queue.join()
         await self._output_queue.join()
         await self._queue.join()
-        await self._hn_resp_queue.join()
-        await self._html_resp_queue.join()
 
         for queue in self._request_queues.values():
             await queue.join()

@@ -2,7 +2,7 @@
 import re
 
 from . import lexer
-from krill.expression import (
+from .expression import (
     FilterExpr,
     AndExpr,
     OrExpr,

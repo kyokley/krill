@@ -96,7 +96,6 @@ class StreamParser:
     @classmethod
     async def get_feed_items(cls, xml, url):
         feed_title = urlparse(url).netloc
-
         async for entry in cls._parse_feed(xml):
             timestamp = cls._feed_item_date(entry)
 
@@ -162,7 +161,7 @@ class TextExcerpter:
     # and containing the first match of pattern, if specified
     @classmethod
     async def get_excerpt(cls, text, max_length, patterns=None):
-        if len(text) <= max_length or True:
+        if len(text) <= max_length:
             return text, False, False
 
         start, end = await cls._get_max_pattern_span(text, patterns)
