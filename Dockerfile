@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=python:3.12-slim
+ARG BASE_IMAGE=python:3.12-alpine
 
 FROM ${BASE_IMAGE} AS base
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -9,10 +9,11 @@ ENV UV_PROJECT_ENVIRONMENT=/venv
 ENV UV_CACHE_DIR=/uv_cache
 ENV APP_DIR=/app
 
-RUN groupadd -r user && \
-        useradd -r -g user user
+RUN addgroup user && adduser -SG user user
 
-RUN apt-get update && apt-get install -y \
+FROM base AS builder
+
+RUN apk update && apk add --no-cache \
         curl \
         libffi-dev \
         g++ \
@@ -34,16 +35,21 @@ USER user
 RUN uv venv --seed && \
         uv sync --no-dev --no-install-project
 
-ENTRYPOINT ["uv", "run", "--no-dev", "krill"]
-CMD ["-u", "30", "-S", "/app/test_sources.txt"]
+FROM base AS dev_or_prod
+RUN pip install --upgrade pip uv
+COPY pyproject.toml uv.lock ${APP_DIR}/
+COPY --from=builder ${UV_PROJECT_ENVIRONMENT} ${UV_PROJECT_ENVIRONMENT}
+WORKDIR /app
 
-FROM base AS prod
+FROM dev_or_prod AS prod
+
 COPY . /app
 RUN uv sync --no-dev
 
+ENTRYPOINT ["uv", "run", "--no-dev", "krill"]
+CMD ["-u", "30", "-S", "/app/test_sources.txt"]
 
-FROM base AS dev-root
-# This looks weird but just trying to take full advantage of caching
+FROM dev_or_prod AS dev-root
 RUN uv sync --no-install-project
 COPY . /app
 RUN uv sync
