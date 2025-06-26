@@ -1,6 +1,15 @@
 import unittest
 
-from krill.lexer import AND, FILTER, LPAREN, NOT, OR, QUOTED_FILTER, RPAREN, filter_lex
+from krill.sources.lexer import (
+    AND,
+    FILTER,
+    LPAREN,
+    NOT,
+    OR,
+    QUOTED_FILTER,
+    RPAREN,
+    filter_lex,
+)
 
 
 class TestLexer(unittest.TestCase):

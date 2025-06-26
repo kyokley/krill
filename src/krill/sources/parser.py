@@ -1,16 +1,16 @@
 # Based on https://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 import re
 
-from krill import lexer
-from krill.expression import (
-    FilterExpr,
+from . import lexer
+from .expression import (
     AndExpr,
-    OrExpr,
+    FilterExpr,
     NotExpr,
+    OrExpr,
     QuotedFilterExpr,
-    traverse,
     build_expr,
     print_expr,
+    traverse,
 )
 
 

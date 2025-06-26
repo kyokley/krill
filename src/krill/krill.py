@@ -7,47 +7,43 @@
 #
 # Released under the terms of the GNU General Public License, version 3
 # (https://gnu.org/licenses/gpl.html)
-from __future__ import unicode_literals
-
-import os
-import asyncio
-import httpx
 import argparse
-import calendar
+import asyncio
 import codecs
+import json
+import os
 import random
 import re
 import sys
-import warnings
-import json
-from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime
+from urllib.parse import urlparse
 
-import feedparser
+import httpx
 from blessings import Terminal
-from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
-from .lexer import filter_lex
-from .parser import TokenParser
+from .feed.parser import StreamItem, StreamParser, TextExcerpter
+from .sources.lexer import filter_lex
+from .sources.parser import TokenParser
+from .utils import validate_timestamp
 
 PROXY = os.environ.get("KRILL_PROXY") or None
-
-warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 rand = random.SystemRandom()
 
 base_type_speed = 0.01
 
-REQUESTS_TIMEOUT = 3
+REQUESTS_TIMEOUT = 10
 NUM_WORKERS = 3
-FILTER_LAST_DAYS = 90
+REQUEST_WORKER_SLEEP = 3
+REQUEST_RETRIES = 3
+RETRY_SLEEP = 1
+OVERRIDE_REQUEST_WORKERS = {"reddit": 1}
+EXCERPT_LENGTH = 500
 
 _invisible_codes = re.compile(
     r"^(\x1b\[\d*m|\x1b\[\d*\;\d*\;\d*m|\x1b\(B)"
 )  # ANSI color codes
-_link_regex = re.compile(r"(?<=\S)(https?://|pics?.x.com)")
 
-StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
 
 HN_TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 HN_NEW_STORIES_URL = "https://hacker-news.firebaseio.com/v0/newstories.json"
@@ -56,163 +52,18 @@ MIN_NUMBER_OF_HN_STORIES = 1
 MAX_NUMBER_OF_HN_STORIES = 5
 
 
+OUTPUT_LOCK = asyncio.Lock()
+
+
 TERMINAL = Terminal()
 
 
-class PromptTimeout(Exception):
+class NoData(Exception):
     pass
 
 
 class Quit(Exception):
     pass
-
-
-async def fix_html(text):
-    return _link_regex.sub(r" \1", text)
-
-
-def validate_timestamp(timestamp):
-    if not timestamp:
-        return False
-
-    last_days_cutoff = datetime.now() - timedelta(days=FILTER_LAST_DAYS)
-    return timestamp > last_days_cutoff
-
-
-class StreamParser:
-    @staticmethod
-    async def _html_to_text(html):
-        # Hack to prevent Beautiful Soup from collapsing space-keeping tags
-        # until no whitespace remains at all
-        html = re.sub(r"<(br|p|li)", " \\g<0>", html, flags=re.IGNORECASE)
-        text = BeautifulSoup(html, "html.parser").get_text()
-        # Idea from http://stackoverflow.com/a/1546251
-        return " ".join(text.strip().split())
-
-    @classmethod
-    async def get_tweets(cls, html):
-        document = BeautifulSoup(html, "html.parser")
-
-        for tweet in document.find_all("p", class_="tweet-text"):
-            header = tweet.find_previous("div", class_="stream-item-header")
-
-            name = header.find("strong", class_="fullname").string
-            username = header.find("span", class_="username").b.string
-
-            time_string = header.find("span", class_="_timestamp")["data-time"]
-            timestamp = datetime.fromtimestamp(int(time_string))
-
-            if not validate_timestamp(timestamp):
-                continue
-
-            # Remove ellipsis characters added by Twitter
-            text = await cls._html_to_text(str(tweet).replace("\u2026", " "))
-
-            tweet_href = header.find("a", class_="tweet-timestamp")["href"]
-            link = f"https://x.com{tweet_href}"
-
-            yield StreamItem(
-                (f"{name} (@{username})" if name else "@{username}"),
-                timestamp,
-                None,
-                await fix_html(text),
-                link,
-            )
-
-    @classmethod
-    async def get_feed_items(cls, xml, url):
-        feed_data = feedparser.parse(xml)
-        # Default to feed URL if no title element is present
-        feed_title = feed_data.feed.get("title", url)
-
-        for entry in feed_data.entries:
-            timestamp = (
-                datetime.fromtimestamp(calendar.timegm(entry.published_parsed))
-                if "published_parsed" in entry and entry.published_parsed
-                else None
-            )
-
-            if not validate_timestamp(timestamp):
-                continue
-
-            title = entry.get("title")
-            if "description" in entry:
-                text = await cls._html_to_text(entry.description)
-            else:
-                text = None
-
-            link = entry.get("link")
-
-            # Some feeds put the text in the title element
-            if text is None and title is not None:
-                text = title
-                title = None
-
-            # At least one element must contain text for the item to be useful
-            if title or text or link:
-                yield StreamItem(
-                    feed_title, timestamp, title, await fix_html(text), link
-                )
-
-
-class TextExcerpter:
-    # Clips the text to the position succeeding the first whitespace string
-    @staticmethod
-    async def _clip_left(text):
-        return re.sub(r"^\S*\s*", "", text, 1)
-
-    # Clips the text to the position preceding the last whitespace string
-    @staticmethod
-    async def _clip_right(text):
-        return re.sub(r"\s*\S*$", "", text, 1)
-
-    @staticmethod
-    async def _get_max_pattern_span(text, patterns):
-        min_start, max_end = None, None
-        if patterns is not None:
-            for pattern in patterns:
-                if match := pattern.search(text):
-                    start, end = match.span()
-                    if min_start is None:
-                        min_start = start
-                    else:
-                        min_start = min(min_start, start)
-                    if max_end is None:
-                        max_end = end
-                    else:
-                        max_end = max(max_end, end)
-
-        return min_start, max_end
-
-    # Returns a portion of text at most max_length in length
-    # and containing the first match of pattern, if specified
-    @classmethod
-    async def get_excerpt(cls, text, max_length, patterns=None):
-        if len(text) <= max_length:
-            return text, False, False
-
-        start, end = await cls._get_max_pattern_span(text, patterns)
-        if start is None and end is None:
-            return await cls._clip_right(text[:max_length]), False, True
-        else:
-            remaining_length = max_length - (end - start)
-            if remaining_length <= 0:
-                # Matches are never clipped
-                return text[start:end], False, False
-
-            excerpt_start = max(start - (remaining_length // 2), 0)
-            excerpt_end = min(
-                end + (remaining_length - (start - excerpt_start)), len(text)
-            )
-            # Adjust start of excerpt in case the string after the match was too short
-            excerpt_start = max(excerpt_end - max_length, 0)
-            excerpt = text[excerpt_start:excerpt_end]
-            if excerpt_start > 0:
-                excerpt = await cls._clip_left(excerpt)
-            if excerpt_end < len(text):
-                excerpt = await cls._clip_right(excerpt)
-
-            return excerpt, excerpt_start > 0, excerpt_end < len(text)
 
 
 class Application:
@@ -250,7 +101,12 @@ class Application:
         self._queue = asyncio.Queue()
         self._items_queue = asyncio.Queue()
         self._output_queue = asyncio.Queue()
+        self._hn_resp_queue = asyncio.Queue()
+        self._html_resp_queue = asyncio.Queue()
+        self._request_queues = dict()
+        self._semaphores = dict()
         self._links = dict()
+        self._tasks = []
 
     async def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
@@ -269,7 +125,112 @@ class Application:
 
     @staticmethod
     async def _print_error(error):
-        print(TERMINAL.red(error), file=sys.stderr)
+        async with OUTPUT_LOCK:
+            print(TERMINAL.red(error), file=sys.stderr)
+
+    async def json_request_worker(self, queue, semaphore, output_queue):
+        while True:
+            await asyncio.sleep(REQUEST_WORKER_SLEEP)
+            if semaphore.locked():
+                continue
+
+            await semaphore.acquire()
+            url, patterns = await queue.get()
+
+            try:
+                async with httpx.AsyncClient(
+                    follow_redirects=True, proxy=PROXY
+                ) as client:
+                    resp = await client.get(url, timeout=REQUESTS_TIMEOUT)
+
+                resp.raise_for_status()
+                output_queue.put_nowait((url, resp.json(), patterns))
+            except Exception as e:
+                await self._print_error(str(e))
+            finally:
+                semaphore.release()
+                queue.task_done()
+
+    async def html_request_worker(self, queue, semaphore, output_queue):
+        while True:
+            await asyncio.sleep(REQUEST_WORKER_SLEEP)
+            if semaphore.locked():
+                continue
+
+            await semaphore.acquire()
+            url, patterns = await queue.get()
+
+            try:
+                for i in range(REQUEST_RETRIES):
+                    try:
+                        await asyncio.sleep(RETRY_SLEEP)
+
+                        async with httpx.AsyncClient(
+                            follow_redirects=True, proxy=PROXY
+                        ) as client:
+                            headers = {
+                                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                            }
+                            resp = await client.get(
+                                url, timeout=REQUESTS_TIMEOUT, headers=headers
+                            )
+                            resp.raise_for_status()
+
+                        if not resp.content.strip():
+                            raise NoData("No data")
+
+                        output_queue.put_nowait((url, resp.content, patterns))
+                        break
+                    except (
+                        httpx.ReadTimeout,
+                        httpx.ConnectTimeout,
+                        httpx.ConnectError,
+                    ) as e:
+                        await self._print_error(
+                            f"Attempt {i}: {url} -> {e.__class__.__name__}: {e}"
+                        )
+                    except Exception as e:
+                        await self._print_error(
+                            f"Attempt {i}: {url} -> {e.__class__.__name__}: {e}"
+                        )
+                        raise
+            finally:
+                semaphore.release()
+                queue.task_done()
+
+    async def _queue_request(self, url, patterns):
+        domain = urlparse(url).netloc
+        if domain not in self._request_queues:
+            self._request_queues[domain] = asyncio.Queue()
+            for dom, value in OVERRIDE_REQUEST_WORKERS.items():
+                if dom.lower() in domain:
+                    num_workers = value
+                    break
+            else:
+                num_workers = NUM_WORKERS
+
+            self._semaphores[domain] = asyncio.Semaphore(num_workers)
+
+            for _ in range(num_workers):
+                if "hackernews" in domain.lower() or "hacker-news" in domain.lower():
+                    task = asyncio.create_task(
+                        self.json_request_worker(
+                            self._request_queues[domain],
+                            self._semaphores[domain],
+                            self._hn_resp_queue,
+                        )
+                    )
+                else:
+                    task = asyncio.create_task(
+                        self.html_request_worker(
+                            self._request_queues[domain],
+                            self._semaphores[domain],
+                            self._html_resp_queue,
+                        )
+                    )
+                self._tasks.append(task)
+
+        self._request_queues[domain].put_nowait((url, patterns))
 
     @classmethod
     async def _hn_story_ids(cls, url, cb=None):
@@ -386,12 +347,16 @@ class Application:
     async def _highlight_pattern(text, patterns, pattern_style, text_style=None):
         if patterns is None:
             return text if text_style is None else text_style(text)
-        if text_style is None:
-            for pattern in patterns:
-                text = pattern.sub(pattern_style("\\g<0>"), text)
-            return text
         for pattern in patterns:
-            text = text_style(pattern.sub(pattern_style("\\g<0>") + text_style, text))
+            if isinstance(pattern, str):
+                regex = re.compile(pattern)
+            else:
+                regex = pattern
+
+            if text_style is None:
+                text = regex.sub(pattern_style("\\g<0>"), text)
+            else:
+                text = text_style(regex.sub(pattern_style("\\g<0>") + text_style, text))
         return text
 
     async def _queue_item(self, item, patterns=None):
@@ -438,7 +403,7 @@ class Application:
 
         if item.text is not None and not self.args.snapshot:
             (excerpt, clipped_left, clipped_right) = await TextExcerpter.get_excerpt(
-                item.text, 300, patterns
+                item.text, EXCERPT_LENGTH, patterns
             )
 
             # Hashtag or mention
@@ -488,95 +453,102 @@ class Application:
         if self.args.snapshot:
             self._queue.put_nowait(snapshot_item)
 
-    async def source_worker(self, queue):
+    async def source_request_worker(self, queue):
         while True:
             url, patterns = await queue.get()
 
-            if "hackernews" not in url.lower():
-                try:
-                    async with httpx.AsyncClient(
-                        follow_redirects=True, proxy=PROXY
-                    ) as client:
-                        headers = {
-                            "User-Agent": "krillbot/0.5 (+http://github.com/kyokley/krill)",
-                        }
-                        data = (
-                            await client.get(
-                                url, timeout=REQUESTS_TIMEOUT, headers=headers
-                            )
-                        ).content
-                except Exception as error:
-                    await self._print_error(f"Unable to get data from {url}: {error}")
+            try:
+                if "hackernews" not in url.lower():
+                    await self._queue_request(url, patterns)
+                else:
+                    async for stream_data in self.hn_stories_generator():
+                        self._items_queue.put_nowait((stream_data, patterns))
+            finally:
+                queue.task_done()
 
+    async def html_source_worker(self):
+        while True:
+            url, data, patterns = await self._html_resp_queue.get()
+
+            try:
                 if "//x.com/" in url:
                     async for stream_data in StreamParser.get_tweets(data):
                         self._items_queue.put_nowait((stream_data, patterns))
                 else:
                     async for stream_data in StreamParser.get_feed_items(data, url):
                         self._items_queue.put_nowait((stream_data, patterns))
-
-            else:
-                async for stream_data in self.hn_stories_generator():
-                    self._items_queue.put_nowait((stream_data, patterns))
-
-            queue.task_done()
+            finally:
+                self._html_resp_queue.task_done()
 
     async def stream_worker(self, queue):
         while True:
             item, re_funcs = await queue.get()
 
-            if re_funcs:
-                for re_func in re_funcs:
-                    title_matches = (
-                        item.title is not None and re_func(item.title) or (False, set())
-                    )
-                    text_matches = (
-                        item.text is not None and re_func(item.text) or (False, set())
-                    )
-                    link_matches = (
-                        item.link is not None and re_func(item.link) or (False, set())
-                    )
-                    if title_matches[0] or text_matches[0] or link_matches[0]:
-                        matched_texts = set()
-                        matched_texts.update(
-                            title_matches[1], text_matches[1], link_matches[1]
+            try:
+                if re_funcs:
+                    for re_func in re_funcs:
+                        title_matches = (
+                            item.title is not None
+                            and re_func(item.title)
+                            or (False, set())
                         )
-                        await self.add_item(item, matched_texts)
-                        break
-            else:
-                # No filter patterns specified; simply print all items
-                await self.add_item(item)
-
-            queue.task_done()
+                        text_matches = (
+                            item.text is not None
+                            and re_func(item.text)
+                            or (False, set())
+                        )
+                        link_matches = (
+                            item.link is not None
+                            and re_func(item.link)
+                            or (False, set())
+                        )
+                        if title_matches[0] or text_matches[0] or link_matches[0]:
+                            matched_texts = set()
+                            matched_texts.update(
+                                title_matches[1], text_matches[1], link_matches[1]
+                            )
+                            await self.add_item(item, matched_texts)
+                            break
+                else:
+                    # No filter patterns specified; simply print all items
+                    await self.add_item(item)
+            except Exception as e:
+                await self._print_error(f"Item {item}: {e.__class__.__name__}: {e}")
+            finally:
+                queue.task_done()
 
     async def output_worker(self, queue):
         while True:
             item = await queue.get()
-            await self._queue_item(item[0], item[1])
-            queue.task_done()
+            try:
+                await self._queue_item(item[0], item[1])
+            finally:
+                queue.task_done()
 
     async def flush_worker(self, queue, interval=0.1):
         while True:
             text = await queue.get()
 
-            if not self.args.snapshot:
-                idx = 0
-                while idx < len(text):
-                    await asyncio.sleep(self.text_speed(interval))
-                    if match := re.search(_invisible_codes, text[idx:]):
-                        end = idx + match.span()[1]
-                        sys.stdout.write(text[idx:end])
-                        idx = end
+            try:
+                async with OUTPUT_LOCK:
+                    if not self.args.snapshot:
+                        idx = 0
+                        while idx < len(text):
+                            await asyncio.sleep(self.text_speed(interval))
+                            if match := re.search(_invisible_codes, text[idx:]):
+                                end = idx + match.span()[1]
+                                sys.stdout.write(text[idx:end])
+                                idx = end
+                            else:
+                                sys.stdout.write(text[idx])
+                                idx += 1
+                            sys.stdout.flush()
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
                     else:
-                        sys.stdout.write(text[idx])
-                        idx += 1
-                    sys.stdout.flush()
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-            else:
-                print(json.dumps(text))
-
-            queue.task_done()
+                        print(json.dumps(text))
+            finally:
+                queue.task_done()
 
     async def _sources(self):
         # Reload sources and filters to allow for live editing
@@ -628,31 +600,38 @@ class Application:
 
         self.items = list()
 
-        tasks = []
         for _ in range(NUM_WORKERS):
-            for _ in range(2):
-                task = asyncio.create_task(self.source_worker(source_queue))
-                tasks.append(task)
+            task = asyncio.create_task(self.source_request_worker(source_queue))
+            self._tasks.append(task)
+
+            task = asyncio.create_task(self.html_source_worker())
+            self._tasks.append(task)
 
             task = asyncio.create_task(self.stream_worker(self._items_queue))
-            tasks.append(task)
+            self._tasks.append(task)
 
             task = asyncio.create_task(self.output_worker(self._output_queue))
-            tasks.append(task)
+            self._tasks.append(task)
 
         task = asyncio.create_task(self.flush_worker(self._queue, self.text_speed_ave))
-        tasks.append(task)
+        self._tasks.append(task)
 
+        await asyncio.sleep(REQUESTS_TIMEOUT)
         await source_queue.join()
+        await self._hn_resp_queue.join()
+        await self._html_resp_queue.join()
         await self._items_queue.join()
         await self._output_queue.join()
         await self._queue.join()
 
-        for task in tasks:
+        for queue in self._request_queues.values():
+            await queue.join()
+
+        for task in self._tasks:
             task.cancel()
 
-        # Wait until all worker tasks are cancelled.
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Wait until all worker self._tasks are cancelled.
+        await asyncio.gather(*self._tasks, return_exceptions=True)
 
     async def run(self):
         await self.populate_sources()

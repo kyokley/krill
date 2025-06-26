@@ -45,3 +45,5 @@ devenv.local.nix
 .pre-commit-config.yaml
 
 .bash_history_krill
+
+sources.txt

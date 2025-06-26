@@ -1,5 +1,5 @@
-from krill.lexer import filter_lex
-from krill.parser import TokenParser
+from krill.sources.lexer import filter_lex
+from krill.sources.parser import TokenParser
 
 
 class TestParser:
