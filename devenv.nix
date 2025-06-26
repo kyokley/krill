@@ -10,6 +10,8 @@
 
   # https://devenv.sh/packages/
   packages = [
+    pkgs.gnumake
+    pkgs.docker
   ];
 
   # https://devenv.sh/languages/
@@ -29,9 +31,20 @@
   # services.postgres.enable = true;
 
   # https://devenv.sh/scripts/
-  scripts.hello.exec = ''
-    echo Welcome to $GREET
-  '';
+  scripts = let
+      host_net = if config.env.USE_HOST_NET == 1
+      then "--network=host" else "";
+    in {
+    hello.exec = ''
+      echo Welcome to $GREET
+    '';
+    build.exec = ''
+      docker build --target=prod -t kyokley/krill-base ${host_net} .
+    '';
+    build-nix.exec = ''
+      docker build -f Dockerfile-nix -t kyokley/krill-base-nix ${host_net} .
+    '';
+  };
 
   enterShell = ''
     hello
