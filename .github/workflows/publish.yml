@@ -21,12 +21,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Docker Login
         env:
           DOCKER_USER: ${{secrets.DOCKER_USER}}
           DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
         run: |
           docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+      - name: Build-nix
+        run: |
+          docker build -t kyokley/krill-base -f Dockerfile-nix .
       - name: Publish
-        run: make publish
+        run: |
+          docker push kyokley/krill-base
