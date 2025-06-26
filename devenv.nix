@@ -32,17 +32,25 @@
 
   # https://devenv.sh/scripts/
   scripts = let
-      host_net = if config.env.USE_HOST_NET == 1
+      network_host = if config.env.USE_HOST_NET == 1
       then "--network=host" else "";
+      net_host = if config.env.USE_HOST_NET == 1
+      then "--net=host" else "";
     in {
     hello.exec = ''
       echo Welcome to $GREET
     '';
     build.exec = ''
-      docker build --target=prod -t kyokley/krill-base ${host_net} .
+      docker build --target=prod -t kyokley/krill-base ${network_host} .
     '';
     build-nix.exec = ''
-      docker build -f Dockerfile-nix -t kyokley/krill-base-nix ${host_net} .
+      docker build -f Dockerfile-nix -t kyokley/krill-base-nix ${network_host} .
+    '';
+    run.exec = ''
+      docker run --rm -it -v .:/files ${net_host} kyokley/krill-base -S /files/sources.txt -u 10 -t 2
+    '';
+    run-nix.exec = ''
+      docker run --rm -it -v .:/files ${net_host} kyokley/krill-base-nix -S /files/sources.txt -u 10 -t 2
     '';
   };
 

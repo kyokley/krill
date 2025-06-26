@@ -33,7 +33,7 @@ rand = random.SystemRandom()
 base_type_speed = 0.01
 
 REQUESTS_TIMEOUT = 10
-NUM_WORKERS = 1
+NUM_WORKERS = 3
 REQUEST_WORKER_SLEEP = 3
 REQUEST_RETRIES = 3
 RETRY_SLEEP = 1
