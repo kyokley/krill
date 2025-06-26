@@ -1,6 +1,6 @@
 import re
 import warnings
-from collections import namedtuple
+from dataclasses import dataclass
 from datetime import datetime
 from itertools import chain
 from urllib.parse import urlparse
@@ -15,7 +15,14 @@ warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 _link_regex = re.compile(r"(?<=\S)(https?://|pics?.(x|twitter).com)")
 
-StreamItem = namedtuple("StreamItem", ["source", "time", "title", "text", "link"])
+
+@dataclass
+class StreamItem:
+    source: str
+    time: datetime
+    title: str
+    text: str
+    link: str
 
 
 async def fix_html(text):
@@ -80,11 +87,11 @@ class StreamParser:
 
     @classmethod
     def _feed_item_date(cls, item):
-        if stripped := (item.date and item.date.text.strip()):
-            date_str = stripped
-        elif stripped := (item.published and item.published.text.strip()):
-            date_str = stripped
-        elif stripped := (item.pubDate and item.pubDate.text.strip()):
+        if stripped := (
+            (item.date and item.date.text.strip())
+            or (item.published and item.published.text.strip())
+            or (item.pubDate and item.pubDate.text.strip())
+        ):
             date_str = stripped
         else:
             return None
