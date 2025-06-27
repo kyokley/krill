@@ -16,20 +16,23 @@ def validate_timestamp(timestamp):
     return timestamp > last_days_cutoff
 
 
-@contextmanager
-def time_log(msg, debug=False):
-    start = datetime.now()
+def get_time_logger(debug):
+    @contextmanager
+    def time_log(msg):
+        start = datetime.now()
 
-    if debug:
-        sys.stdout.write(f"Start {msg}")
-        sys.stdout.flush()
-
-    try:
-        yield
-    except:
-        raise
-    finally:
-        finish = datetime.now()
         if debug:
-            sys.stdout.write(f"Finish {msg} in {finish - start}")
+            sys.stdout.write(f"Start {msg}\n")
             sys.stdout.flush()
+
+        try:
+            yield
+        except:
+            raise
+        finally:
+            finish = datetime.now()
+            if debug:
+                sys.stdout.write(f"Finish {msg} in {finish - start}\n")
+                sys.stdout.flush()
+
+    return time_log

@@ -108,7 +108,8 @@ class StreamParser:
             if not validate_timestamp(timestamp):
                 continue
 
-            title = entry.title.text.strip()
+            title = entry.title.text.strip() if entry.title else None
+
             description = (
                 entry.description and entry.description.text.strip()
             ) or entry.text.strip()
