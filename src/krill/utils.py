@@ -1,8 +1,20 @@
+import asyncio
+import random
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 FILTER_LAST_DAYS = 90
+
+
+class RandomQueue(asyncio.PriorityQueue):
+    def put_nowait(self, item):
+        priority = random.random()
+        super().put_nowait((priority, item))
+
+    async def get(self):
+        priority, item = await super().get()
+        return item
 
 
 def validate_timestamp(timestamp):
