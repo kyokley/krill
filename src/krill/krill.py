@@ -24,7 +24,7 @@ from blessings import Terminal
 from .feed.parser import StreamItem, StreamParser, TextExcerpter
 from .sources.lexer import filter_lex
 from .sources.parser import TokenParser
-from .utils import validate_timestamp
+from .utils import get_time_logger, validate_timestamp
 
 PROXY = os.environ.get("KRILL_PROXY") or None
 
@@ -80,6 +80,8 @@ class Application:
             if speed < 0 or speed > 10:
                 raise ValueError("Speed is invalid. Got %s" % speed)
             self.text_speed_ave = speed
+
+        self.time_log = get_time_logger(self.args.verbose)
 
         self.clear()
 
@@ -171,10 +173,12 @@ class Application:
                             headers = {
                                 "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
                             }
-                            resp = await client.get(
-                                url, timeout=REQUESTS_TIMEOUT, headers=headers
-                            )
-                            resp.raise_for_status()
+
+                            with self.time_log(f"request {url}"):
+                                resp = await client.get(
+                                    url, timeout=REQUESTS_TIMEOUT, headers=headers
+                                )
+                                resp.raise_for_status()
 
                         if not resp.content.strip():
                             raise NoData("No data")
@@ -722,6 +726,12 @@ def main():
         default="0",
         type=str,
         help="text speed (0-10) 10 is slowest. 0 represents no delay. Default is 0.",
+    )
+    arg_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="display debugging messages",
     )
     args = arg_parser.parse_args()
 
