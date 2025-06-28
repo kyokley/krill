@@ -24,7 +24,7 @@ from blessings import Terminal
 from .feed.parser import StreamItem, StreamParser, TextExcerpter
 from .sources.lexer import filter_lex
 from .sources.parser import TokenParser
-from .utils import get_time_logger, validate_timestamp
+from .utils import RandomQueue, get_time_logger, validate_timestamp
 
 PROXY = os.environ.get("KRILL_PROXY") or None
 
@@ -100,7 +100,7 @@ class Application:
 
     def clear(self):
         self.items = list()
-        self._queue = asyncio.Queue()
+        self._queue = RandomQueue()
         self._items_queue = asyncio.Queue()
         self._output_queue = asyncio.Queue()
         self._hn_resp_queue = asyncio.Queue()
@@ -364,11 +364,10 @@ class Application:
         return text
 
     async def _queue_item(self, item, patterns=None):
+        entry = []
         self.item_count += 1
 
-        if not self.args.snapshot:
-            self._queue.put_nowait("")
-        else:
+        if self.args.snapshot:
             snapshot_item = dict()
 
         time_label = (
@@ -381,7 +380,7 @@ class Application:
         )
 
         if not self.args.snapshot:
-            self._queue.put_nowait(
+            entry.append(
                 "{}. {}{}:".format(
                     self.item_count, TERMINAL.cyan(item.source), time_label
                 )
@@ -391,7 +390,7 @@ class Application:
 
         if item.title is not None:
             if not self.args.snapshot:
-                self._queue.put_nowait(
+                entry.append(
                     "{}{}".format(
                         indent,
                         await self._highlight_pattern(
@@ -428,7 +427,7 @@ class Application:
                 excerpt, patterns, TERMINAL.black_on_yellow
             )
 
-            self._queue.put_nowait(
+            entry.append(
                 "{}{}{}{}".format(
                     indent,
                     "... " if clipped_left else "",
@@ -440,7 +439,7 @@ class Application:
         if item.link is not None:
             self._links[self.item_count] = item.link
             if not self.args.snapshot:
-                self._queue.put_nowait(
+                entry.append(
                     "{}{}".format(
                         indent,
                         await self._highlight_pattern(
@@ -454,8 +453,12 @@ class Application:
             else:
                 snapshot_item["link"] = item.link
 
+        entry.append("\n")
+
         if self.args.snapshot:
             self._queue.put_nowait(snapshot_item)
+        else:
+            self._queue.put_nowait("\n".join(entry))
 
     async def source_request_worker(self, queue):
         while True:
