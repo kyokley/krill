@@ -63,4 +63,8 @@ else
 endif
 
 tests: build-dev ## Run test cases
-	docker run --rm -t -v $$(pwd):/app --entrypoint uv kyokley/krill-base run -n pytest
+ifeq ($(USE_HOST_NET), 1)
+	docker run --rm -t --network=host --entrypoint uv kyokley/krill-base run -n pytest
+else
+	docker run --rm -t --entrypoint uv kyokley/krill-base run -n pytest
+endif
