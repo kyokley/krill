@@ -93,7 +93,7 @@ class Application:
             if source_patterns:
                 tokens = filter_lex(source_patterns)
                 parser = TokenParser(tokens)
-                re_funcs = [parser.build()]
+                re_funcs = [parser()]
             else:
                 re_funcs = global_patterns
             self.sources.append((source, re_funcs))
@@ -110,13 +110,15 @@ class Application:
         self._links = dict()
         self._tasks = []
 
+        self.stream_sem = asyncio.Semaphore(NUM_WORKERS)
+
     async def add_item(self, item, patterns=None):
         item_id = (item.source, item.link)
         if item_id in self._known_items:
             # Do not print an item more than once
             return
         self._known_items.add(item_id)
-        self._output_queue.put_nowait((item, patterns))
+        self._tasks.append(asyncio.create_task(self._queue_item(item, patterns)))
 
     def text_speed(self, interval_ave):
         if interval_ave == 0:
@@ -183,7 +185,11 @@ class Application:
                         if not resp.content.strip():
                             raise NoData("No data")
 
-                        output_queue.put_nowait((url, resp.content, patterns))
+                        self._tasks.append(
+                            asyncio.create_task(
+                                self.html_source_worker(url, resp.content, patterns)
+                            )
+                        )
                         break
                     except (
                         httpx.ReadTimeout,
@@ -469,28 +475,25 @@ class Application:
                     await self._queue_request(url, patterns)
                 else:
                     async for stream_data in self.hn_stories_generator():
-                        self._items_queue.put_nowait((stream_data, patterns))
+                        task = asyncio.create_task(
+                            self.stream_worker(stream_data, patterns)
+                        )
+                        self._tasks.append(task)
             finally:
                 queue.task_done()
 
-    async def html_source_worker(self):
-        while True:
-            url, data, patterns = await self._html_resp_queue.get()
+    async def html_source_worker(self, url, data, patterns):
+        if "//x.com/" in url:
+            async for stream_data in StreamParser.get_tweets(data):
+                task = asyncio.create_task(self.stream_worker(stream_data, patterns))
+                self._tasks.append(task)
+        else:
+            async for stream_data in StreamParser.get_feed_items(data, url):
+                task = asyncio.create_task(self.stream_worker(stream_data, patterns))
+                self._tasks.append(task)
 
-            try:
-                if "//x.com/" in url:
-                    async for stream_data in StreamParser.get_tweets(data):
-                        self._items_queue.put_nowait((stream_data, patterns))
-                else:
-                    async for stream_data in StreamParser.get_feed_items(data, url):
-                        self._items_queue.put_nowait((stream_data, patterns))
-            finally:
-                self._html_resp_queue.task_done()
-
-    async def stream_worker(self, queue):
-        while True:
-            item, re_funcs = await queue.get()
-
+    async def stream_worker(self, item, re_funcs):
+        async with self.stream_sem:
             try:
                 if re_funcs:
                     for re_func in re_funcs:
@@ -521,8 +524,6 @@ class Application:
                     await self.add_item(item)
             except Exception as e:
                 await self._print_error(f"Item {item}: {e.__class__.__name__}: {e}")
-            finally:
-                queue.task_done()
 
     async def output_worker(self, queue):
         while True:
@@ -588,7 +589,7 @@ class Application:
             try:
                 tokens = filter_lex(filter_string)
                 parser = TokenParser(tokens)
-                global_patterns.append(parser.build())
+                global_patterns.append(parser())
             except Exception as error:
                 await self._print_error(
                     f"Error while compiling regular expression '{filter_string}': {error}"
@@ -611,14 +612,14 @@ class Application:
             task = asyncio.create_task(self.source_request_worker(source_queue))
             self._tasks.append(task)
 
-            task = asyncio.create_task(self.html_source_worker())
-            self._tasks.append(task)
+            # task = asyncio.create_task(self.html_source_worker())
+            # self._tasks.append(task)
 
-            task = asyncio.create_task(self.stream_worker(self._items_queue))
-            self._tasks.append(task)
+            # task = asyncio.create_task(self.stream_worker(self._items_queue))
+            # self._tasks.append(task)
 
-            task = asyncio.create_task(self.output_worker(self._output_queue))
-            self._tasks.append(task)
+            # task = asyncio.create_task(self.output_worker(self._output_queue))
+            # self._tasks.append(task)
 
         task = asyncio.create_task(self.flush_worker(self._queue, self.text_speed_ave))
         self._tasks.append(task)
@@ -626,8 +627,8 @@ class Application:
         await asyncio.sleep(REQUESTS_TIMEOUT)
         await source_queue.join()
         await self._hn_resp_queue.join()
-        await self._html_resp_queue.join()
-        await self._items_queue.join()
+        # await self._html_resp_queue.join()
+        # await self._items_queue.join()
         await self._output_queue.join()
         await self._queue.join()
 
