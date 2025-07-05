@@ -2,7 +2,7 @@ from functools import singledispatch
 
 
 class _Expr:
-    def build(self):
+    def __call__(self):
         return traverse(self, build_expr)
 
     def __str__(self):
