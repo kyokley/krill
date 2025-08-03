@@ -154,5 +154,5 @@ class TokenParser:
                 self.error()
         return expr
 
-    def build(self):
-        return self.E().build()
+    def __call__(self):
+        return self.E()()
