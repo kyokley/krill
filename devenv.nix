@@ -47,11 +47,9 @@
       docker build -f Dockerfile-nix -t kyokley/krill-base-nix ${network_host} .
     '';
     run.exec = ''
-      build
       docker run --rm -it -v .:/files ${net_host} kyokley/krill-base -S /files/sources.txt -u 10 -t 2
     '';
     run-nix.exec = ''
-      build-nix
       docker run --rm -it -v .:/files ${net_host} kyokley/krill-base-nix -S /files/sources.txt -u 10 -t 2
     '';
   };

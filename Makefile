@@ -46,7 +46,7 @@ else
 endif
 
 autoformat: ## autoformat source code with black
-	docker run --rm -v $$(pwd):/app kyokley/krill-base /bin/bash -c "find . -name '*.py' | xargs isort && find . -name '*.py' | xargs black -S"
+	docker run --rm -v $$(pwd)/krill:/app/krill kyokley/krill-base /bin/bash -c "find . -name '*.py' | xargs isort && find . -name '*.py' | xargs black -S"
 
 touch-history:
 	@touch ./.bash_history_krill
@@ -57,14 +57,10 @@ publish: build ## Build and push docker image to dockerhub
 
 run: build ## Run krill
 ifeq ($(USE_HOST_NET), 1)
-	docker run --rm -it --network=host -v $$(pwd):/app kyokley/krill-base
+	docker run --rm -it --network=host -v $$(pwd)/krill:/app/krill kyokley/krill-base
 else
-	docker run --rm -it -v $$(pwd):/app kyokley/krill-base
+	docker run --rm -it -v $$(pwd)/krill:/app/krill kyokley/krill-base
 endif
 
 tests: build-dev ## Run test cases
-ifeq ($(USE_HOST_NET), 1)
-	docker run --rm -t --network=host --entrypoint uv kyokley/krill-base run -n pytest
-else
-	docker run --rm -t --entrypoint uv kyokley/krill-base run -n pytest
-endif
+	docker run --rm -t -v $$(pwd)/krill:/app/krill --entrypoint uv kyokley/krill-base run -n pytest

@@ -13,7 +13,7 @@ class TestParser:
         affirm_str = "python is great"
         neg_str = "rust is great"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -27,7 +27,7 @@ class TestParser:
         affirm_str = "python is great"
         neg_str = "rust is great"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -41,7 +41,7 @@ class TestParser:
         affirm_str = "python is the best"
         neg_str = "python is great"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -55,7 +55,7 @@ class TestParser:
         affirm_str = "python is fun and python is simple"
         neg_str = "python is only fun"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -69,7 +69,7 @@ class TestParser:
         affirm_str = "python is fun and python is simple"
         neg_str = "python is only fun"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -83,7 +83,7 @@ class TestParser:
         affirm_str = "python is fun and python is simple and python is the best"
         neg_str = "python is fun and python is the best"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -97,7 +97,7 @@ class TestParser:
         affirm_str = "python is the best"
         neg_str = "rust is the best"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
 
@@ -114,7 +114,7 @@ class TestParser:
         )
         neg_str = "python is fun and python is the great"
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         for affirm_str in affirm_strs:
             assert test_func(affirm_str)[0]
         assert not test_func(neg_str)[0]
@@ -135,7 +135,7 @@ class TestParser:
             "python is great and python is simple",
         )
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         for affirm_str in affirm_strs:
             assert test_func(affirm_str)[0]
         for neg_str in neg_strs:
@@ -148,7 +148,7 @@ class TestParser:
         actual = str(TokenParser(tokens).E())
         assert expected == actual
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         affirm_strs = (
             "python is great, python is simple",
             "python is fun and python is the best",
@@ -169,7 +169,7 @@ class TestParser:
         actual = str(TokenParser(tokens).E())
         assert expected == actual
 
-        test_func = TokenParser(tokens)()
+        test_func = TokenParser(tokens).build()
         affirm_strs = (
             "python is great, python is simple",
             "python is fun and python is the best",
