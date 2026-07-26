@@ -70,30 +70,33 @@
         };
 
         # Nix Package for Your Application
-        packages.default = pkgs.stdenv.mkDerivation {
-          pname = thisProjectAsNixPkg.pname;
-          version = thisProjectAsNixPkg.version;
-          src = ./.; # Source of your main script
+        packages = {
+          ${thisProjectAsNixPkg.pname} = pkgs.stdenv.mkDerivation {
+            inherit (thisProjectAsNixPkg) pname version;
+            src = ./.; # Source of your main script
 
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          buildInputs = [ noDevPythonEnv ]; # Runtime Python environment
+            nativeBuildInputs = [pkgs.makeWrapper];
+            buildInputs = [noDevPythonEnv]; # Runtime Python environment
 
-          installPhase = ''
-            mkdir -p $out/bin
-            cp ${noDevPythonEnv}/bin/krill $out/bin/${thisProjectAsNixPkg.pname}-script
-            chmod +x $out/bin/${thisProjectAsNixPkg.pname}-script
-            makeWrapper ${noDevPythonEnv}/bin/python $out/bin/${thisProjectAsNixPkg.pname} \
-              --add-flags $out/bin/${thisProjectAsNixPkg.pname}-script
-          '';
+            installPhase = ''
+              mkdir -p $out/bin
+              cp ${noDevPythonEnv}/bin/krill $out/bin/${thisProjectAsNixPkg.pname}-script
+              chmod +x $out/bin/${thisProjectAsNixPkg.pname}-script
+              makeWrapper ${noDevPythonEnv}/bin/python $out/bin/${thisProjectAsNixPkg.pname} \
+                --add-flags $out/bin/${thisProjectAsNixPkg.pname}-script
+            '';
+          };
+          default = self.packages.${system}.${thisProjectAsNixPkg.pname};
         };
-        packages.${thisProjectAsNixPkg.pname} = self.packages.${system}.default;
 
         # App for `nix run`
-        apps.default = {
-          type = "app";
-          program = "${self.packages.${system}.default}/bin/${thisProjectAsNixPkg.pname}";
+        apps = {
+          default = {
+            type = "app";
+            program = "${self.packages.${system}.default}/bin/${thisProjectAsNixPkg.pname}";
+          };
+          ${thisProjectAsNixPkg.pname} = self.packages.${system}.${thisProjectAsNixPkg.pname};
         };
-        apps.${thisProjectAsNixPkg.pname} = self.apps.${system}.default;
       }
     );
 }
