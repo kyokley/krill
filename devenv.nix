@@ -5,19 +5,25 @@
   env = {
     GREET = "Krill";
     USE_HOST_NET = 1;
-    PYTHONPATH=".";
+    LIBXML2_DIR = "${pkgs.libxml2.dev}";
+    LIBXSLT_DIR = "${pkgs.libxslt.dev}";
+    LIBRARY_PATH = "${pkgs.zlib}/lib:${pkgs.libxml2}/lib:${pkgs.libxslt}/lib:${pkgs.libiconv}/lib";
   };
 
   # https://devenv.sh/packages/
   packages = [
     pkgs.gnumake
     pkgs.docker
+    pkgs.zlib
+    pkgs.libxml2
+    pkgs.libxslt
+    pkgs.libiconv
   ];
 
   # https://devenv.sh/languages/
   languages.python = {
     enable = true;
-    version = "3.12";
+    version = "3.14";
     uv = {
       enable = true;
       sync.enable = true;
